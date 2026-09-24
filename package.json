@@ -1,0 +1,186 @@
+{
+  "name": "claude-cli-lite",
+  "displayName": "Claude CLI Lite",
+  "description": "Ponte leve entre o editor e a instalação global do Claude Code (CLI) — sem contexto fantasma, sem chaves de API, sem SDKs de IA embutidos.",
+  "version": "0.2.3",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Ações de terminal ficam desativadas em workspaces não confiáveis."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeCliLite.askSelection",
+        "title": "Claude: Nova pergunta sobre seleção"
+      },
+      {
+        "command": "claudeCliLite.continueConversation",
+        "title": "Claude: Continuar conversa"
+      },
+      {
+        "command": "claudeCliLite.clearConversation",
+        "title": "Claude: Limpar conversa"
+      },
+      {
+        "command": "claudeCliLite.addToContext",
+        "title": "Claude: Adicionar ao contexto"
+      },
+      {
+        "command": "claudeCliLite.manageContext",
+        "title": "Claude: Gerir ficheiros do contexto"
+      },
+      {
+        "command": "claudeCliLite.clearContext",
+        "title": "Claude: Limpar contexto"
+      },
+      {
+        "command": "claudeCliLite.showProposal",
+        "title": "Claude: Ver alterações propostas"
+      },
+      {
+        "command": "claudeCliLite.applyProposal",
+        "title": "Claude: Aplicar alterações",
+        "icon": "$(check)"
+      },
+      {
+        "command": "claudeCliLite.discardProposal",
+        "title": "Claude: Descartar alterações",
+        "icon": "$(close)"
+      },
+      {
+        "command": "claudeCliLite.statusMenu",
+        "title": "Claude: Estado"
+      },
+      {
+        "command": "claudeCliLite.cancel",
+        "title": "Claude: Cancelar pedido"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "claudeCliLite.askSelection",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "claudeCliLite.continueConversation",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c",
+        "when": "editorTextFocus"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "claudeCliLite.askSelection",
+          "when": "editorHasSelection",
+          "group": "9_cutcopypaste"
+        },
+        {
+          "command": "claudeCliLite.continueConversation",
+          "when": "editorTextFocus",
+          "group": "9_cutcopypaste"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "claudeCliLite.addToContext",
+          "when": "!explorerResourceIsFolder",
+          "group": "claude@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "claudeCliLite.addToContext",
+          "group": "claude@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "claudeCliLite.applyProposal",
+          "when": "resourceScheme == claude-proposal",
+          "group": "navigation@1"
+        },
+        {
+          "command": "claudeCliLite.discardProposal",
+          "when": "resourceScheme == claude-proposal",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "claudeCliLite.applyProposal",
+          "when": "claudeCliLite.hasProposal"
+        },
+        {
+          "command": "claudeCliLite.discardProposal",
+          "when": "claudeCliLite.hasProposal"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Claude CLI Lite",
+      "properties": {
+        "claudeCliLite.cliPath": {
+          "type": "string",
+          "scope": "machine",
+          "default": "claude",
+          "description": "Caminho para o executável da CLI global do Claude Code. Deixe \"claude\" se estiver no PATH, ou indique o caminho completo (ex.: C:\\Users\\<user>\\AppData\\Roaming\\npm\\claude.cmd)."
+        },
+        "claudeCliLite.model": {
+          "type": "string",
+          "default": "",
+          "description": "Modelo a usar (ex.: \"sonnet\", \"opus\"). Deixe vazio para usar o modelo por defeito da CLI."
+        },
+        "claudeCliLite.extraArgs": {
+          "type": "array",
+          "scope": "machine",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Argumentos extra a passar à CLI, adicionados no fim da lista de flags."
+        },
+        "claudeCliLite.historyMaxTurns": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "description": "Nº máximo de pares pergunta/resposta guardados na memória da conversa."
+        },
+        "claudeCliLite.historyMaxChars": {
+          "type": "number",
+          "default": 20000,
+          "description": "Limite total de caracteres do histórico; descarta primeiro os turnos mais antigos."
+        },
+        "claudeCliLite.contextMaxChars": {
+          "type": "number",
+          "default": 60000,
+          "description": "Acima deste total de caracteres nos ficheiros do contexto, pede confirmação antes de enviar."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.74.0",
+    "@vscode/vsce": "^2.32.0",
+    "typescript": "^5.4.0"
+  }
+}
+
