@@ -1,83 +1,86 @@
 # Claude CLI Lite
 
-Extensão leve para o Opencode (baseado em VS Code) que atua como uma **ponte
-visual** entre o editor e a tua instalação global do `claude-code`, já
-autenticada no terminal. Não tem inteligência própria, não importa pacotes de
-IA e não gere chaves de API — apenas invoca a CLI existente via
-`child_process.spawn` e transmite (streaming) a resposta para um
-`OutputChannel`.
+Extensão para VS Code e Opencode que liga o editor à instalação do [Claude Code](https://claude.com/claude-code) que você já tem autenticada no terminal.
 
-## Porquê
+Ela não embute SDK de IA e não guarda chave de API. Só chama a CLI com `child_process.spawn`, envia o seu pedido pelo `stdin` e mostra a resposta em streaming.
 
-A integração nativa do Claude no editor envia a árvore de ficheiros completa
-e ficheiros inteiros como contexto a cada mensagem, gastando muitos tokens.
-Esta extensão só envia a tua instrução + o bloco de código que selecionaste.
+## Por que existe
 
-## Fluxo de utilização
+As integrações completas mandam a árvore do projeto e arquivos inteiros como contexto a cada mensagem, o que consome muitos tokens. Aqui o contexto é só o que você escolhe: a instrução, o trecho selecionado e os arquivos que você adicionou à mão.
 
-1. Seleciona um bloco de código no editor.
-2. `Ctrl+Shift+C` (ou Command Palette → "Claude: Perguntar sobre seleção").
-3. Escreve a instrução na caixa que aparece (ex.: "Refatore isto").
-4. A extensão chama `claude -p` com a instrução + código, via stdin.
-5. A resposta aparece em streaming no canal de output "Claude CLI Lite".
+## O que faz
 
-Para cancelar um pedido em curso: Command Palette → "Claude: Cancelar
-pedido", ou clica em "Cancel" na notificação de progresso.
+- **Pergunta sobre a seleção.** Selecione um trecho, aperte `Ctrl+Shift+C` e escreva a instrução. A resposta aparece em streaming no canal de saída "Claude CLI Lite".
+- **Conversa com memória curta.** `Ctrl+Alt+C` continua a conversa. O histórico fica só na memória da extensão, limitado por número de turnos e de caracteres, e some ao recarregar a janela.
+- **Carrinho de contexto.** Clique com o botão direito em um arquivo e escolha "Claude: Adicionar ao contexto". O conteúdo é lido na hora do envio, então vale a versão atual, mesmo sem salvar.
+- **Propostas com diff.** Quando a resposta traz código, a extensão avisa e deixa você abrir um diff lado a lado para aplicar ou descartar. Nada é alterado sem a sua confirmação.
+- **Barra de status.** Mostra quantos turnos há na conversa e quantos arquivos estão no contexto.
 
-## Instalação e teste local
+## Comandos
 
-1. Instalar dependências de desenvolvimento:
+| Comando | Atalho | O que faz |
+|---|---|---|
+| Claude: Nova pergunta sobre seleção | `Ctrl+Shift+C` | Começa um pedido com o trecho selecionado |
+| Claude: Continuar conversa | `Ctrl+Alt+C` | Envia outra mensagem mantendo o histórico |
+| Claude: Limpar conversa | | Apaga o histórico em memória |
+| Claude: Adicionar ao contexto | menu de contexto | Põe o arquivo no carrinho |
+| Claude: Gerir ficheiros do contexto | | Lista e remove arquivos do carrinho |
+| Claude: Limpar contexto | | Esvazia o carrinho |
+| Claude: Ver alterações propostas | | Abre o diff da proposta pendente |
+| Claude: Aplicar alterações | botão no diff | Grava a proposta no arquivo |
+| Claude: Descartar alterações | botão no diff | Descarta a proposta |
+| Claude: Estado | clique na barra de status | Menu com as ações acima |
+| Claude: Cancelar pedido | | Interrompe o pedido em andamento |
 
-   ```bash
-   cd claude-cli-lite
-   npm install
-   ```
+No macOS os atalhos usam `Cmd` no lugar de `Ctrl`.
 
-2. Compilar:
+## Instalação
 
-   ```bash
-   npm run compile
-   ```
+Pré-requisitos: Node.js 20+ e a CLI do Claude Code instalada e autenticada (`claude` funcionando no terminal).
 
-3. Testar em modo de desenvolvimento: abre a pasta `claude-cli-lite` no
-   Opencode e pressiona `F5`. Abre uma nova janela ("Extension Development
-   Host") com a extensão já ativa. Abre qualquer ficheiro, seleciona código e
-   usa `Ctrl+Shift+C`.
-
-4. Empacotar e instalar definitivamente:
-
-   ```bash
-   npx @vscode/vsce package
-   ```
-
-   Isto gera `claude-cli-lite-0.1.0.vsix`. No Opencode: Command Palette →
-   "Extensions: Install from VSIX…" → escolhe o ficheiro gerado.
-
-## Definições
-
-| Definição                    | Default   | Descrição                                                                 |
-| ----------------------------- | --------- | -------------------------------------------------------------------------- |
-| `claudeCliLite.cliPath`       | `"claude"`| Caminho para o executável da CLI. Usa o caminho completo se não estiver no PATH, ex.: `C:\Users\<user>\AppData\Roaming\npm\claude.cmd`. |
-| `claudeCliLite.model`         | `""`      | Modelo a usar (ex.: `sonnet`, `opus`). Vazio = default da CLI.             |
-| `claudeCliLite.extraArgs`     | `[]`      | Argumentos extra adicionados no fim da chamada à CLI.                      |
-
-## Se a CLI não for encontrada
-
-A extensão mostra um aviso com um botão "Abrir definições". Define
-`claudeCliLite.cliPath` com o caminho completo do executável, por exemplo:
-
-```
-C:\Users\<o-teu-utilizador>\AppData\Roaming\npm\claude.cmd
+```bash
+git clone https://github.com/danieelaugustoo/ai-CLIte.git
+cd ai-CLIte
+npm install
+npm run compile
 ```
 
-## Notas técnicas
+Para testar sem instalar, abra a pasta no editor e aperte `F5`. Uma segunda janela abre com a extensão ativa.
 
-- O prompt é sempre enviado via `stdin`, nunca como argumento de linha de
-  comando — evita problemas de escape com aspas, barras, `%`, `^`, `&`, `!`
-  e quebras de linha no Windows.
-- No Windows, o processo é lançado com `shell: true` porque o executável
-  instalado pelo npm é um shim `.cmd`.
-- A CLI corre em modo "cirúrgico": sem ferramentas (`--tools ""`), sem
-  servidores MCP (`--strict-mcp-config`) e sem persistir a sessão em disco
-  (`--no-session-persistence`).
-- Só é permitido um pedido de cada vez.
+Para instalar de vez, gere o pacote e instale pelo comando "Extensions: Install from VSIX…":
+
+```bash
+npm run package
+```
+
+## Configurações
+
+| Configuração | Padrão | Descrição |
+|---|---|---|
+| `claudeCliLite.cliPath` | `"claude"` | Caminho do executável. Use o caminho completo se ele não estiver no PATH, por exemplo `C:\Users\<usuario>\AppData\Roaming\npm\claude.cmd` |
+| `claudeCliLite.model` | `""` | Modelo a usar (`sonnet`, `opus`). Vazio usa o padrão da CLI |
+| `claudeCliLite.extraArgs` | `[]` | Argumentos extras acrescentados no fim da chamada |
+| `claudeCliLite.historyMaxTurns` | `3` | Máximo de pares pergunta/resposta guardados |
+| `claudeCliLite.historyMaxChars` | `20000` | Limite de caracteres do histórico. Os turnos mais antigos saem primeiro |
+| `claudeCliLite.contextMaxChars` | `60000` | Acima desse total nos arquivos do contexto, a extensão pede confirmação antes de enviar |
+
+Se a CLI não for encontrada, a extensão mostra um aviso com um botão que leva direto à configuração `cliPath`.
+
+## Decisões de segurança
+
+- **O prompt vai sempre pelo `stdin`**, nunca como argumento de linha de comando. Isso evita problemas de escape e injeção com aspas, `%`, `^`, `&`, `!` e quebras de linha, principalmente no Windows, onde o processo precisa de `shell: true` porque o executável do npm é um shim `.cmd`.
+- **A CLI roda sem ferramentas** (`--tools ""`), sem servidores MCP (`--strict-mcp-config`) e sem gravar sessão em disco (`--no-session-persistence`). Ela só lê o que recebe e responde em texto.
+- **`cliPath` e `extraArgs` têm escopo de máquina**, então um repositório aberto não consegue trocar o executável nem os argumentos pelo `settings.json` do workspace.
+- **Workspaces não confiáveis** têm suporte limitado, com as ações de terminal desativadas.
+- **Um pedido por vez.**
+
+## Estrutura
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `src/extension.ts` | Ativação, comandos, barra de status e chamada da CLI |
+| `src/prompt.ts` | Monta o texto enviado: contexto, histórico e pedido, nessa ordem |
+| `src/conversation.ts` | Memória da conversa |
+| `src/contextCart.ts` | Carrinho de arquivos de contexto |
+| `src/proposal.ts` | Extrai blocos de código da resposta, mostra o diff e aplica ou descarta |
+| `cobaia/cobaia.py` | Arquivo de teste para selecionar trechos e experimentar a extensão |
