@@ -27,6 +27,7 @@ import * as conversation from "./conversation";
 import * as cart from "./contextCart";
 import * as proposal from "./proposal";
 import { isValidModel } from "./validation";
+import { redact, StreamRedactor } from "./secrets";
 
 // ---------------------------------------------------------------------------
 // Estado do módulo
@@ -43,6 +44,20 @@ let cancelRequested = false;
 
 /** Barra de estado: nº de turnos na memória e de ficheiros no carrinho. */
 let statusBar: vscode.StatusBarItem;
+
+/** Tudo o que vai para o canal de saída passa por `redact`, para nenhum segredo aparecer em claro (S11). */
+function logAppend(text: string): void {
+  outputChannel.append(redact(text));
+}
+function logLine(text: string): void {
+  outputChannel.appendLine(redact(text));
+}
+/** Para texto que já passou pelo StreamRedactor. */
+function logRaw(text: string): void {
+  if (text) {
+    outputChannel.append(text);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Ativação / desativação
@@ -197,7 +212,7 @@ async function ask(mode: "new" | "continue"): Promise<void> {
   try {
     run = prepareRunDir(cwdUri);
   } catch (err: any) {
-    vscode.window.showErrorMessage(`Claude CLI Lite: não foi possível criar a pasta temporária (${err?.message ?? String(err)}).`);
+    vscode.window.showErrorMessage(`Claude CLI Lite: não foi possível criar a pasta temporária (${redact(err?.message ?? String(err))}).`);
     return;
   }
 
@@ -393,6 +408,8 @@ interface StreamState {
   isError: boolean;
   /** Preenchido quando o evento `init` mostra ferramentas ou MCP carregados (o pedido é abortado). */
   initViolation?: string;
+  /** Redige a resposta em streaming sem deixar um segredo escapar entre dois pedaços. */
+  redactor: StreamRedactor;
 }
 
 /** `headerLines` são escritas no canal antes do comando (resumo do contexto, avisos do carrinho). */
@@ -405,10 +422,10 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
   outputChannel.clear();
   outputChannel.show(true);
   for (const line of headerLines) {
-    outputChannel.appendLine(line);
+    logLine(line);
   }
-  outputChannel.appendLine(`$ ${cliPath} ${args.map(quoteForDisplay).join(" ")}`);
-  outputChannel.appendLine("");
+  logLine(`$ ${cliPath} ${args.map(quoteForDisplay).join(" ")}`);
+  logLine("");
 
   return vscode.window.withProgress<RunResult>(
     {
@@ -443,7 +460,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
 
         let stdoutBuffer = "";
         let stderrBuffer = "";
-        const state: StreamState = { receivedAnyDelta: false, text: "", isError: false };
+        const state: StreamState = { receivedAnyDelta: false, text: "", isError: false, redactor: new StreamRedactor() };
         let spawnFailed = false;
         let abortedForSafety = false;
 
@@ -468,7 +485,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
 
         child.stderr.on("data", (chunk: string) => {
           stderrBuffer += chunk;
-          outputChannel.append(`[stderr] ${chunk}`);
+          logAppend(`[stderr] ${chunk}`);
         });
 
         child.on("error", (err: NodeJS.ErrnoException) => {
@@ -490,9 +507,10 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
             handleStreamLine(stdoutBuffer, state);
             stdoutBuffer = "";
           }
+          logRaw(state.redactor.flush());
 
           if (state.initViolation) {
-            outputChannel.appendLine(`\n[pedido abortado por segurança] ${state.initViolation}.`);
+            logLine(`\n[pedido abortado por segurança] ${state.initViolation}.`);
             vscode.window.showErrorMessage(
               `Claude CLI Lite: pedido abortado por segurança (${state.initViolation}). Veja o canal "Claude CLI Lite".`
             );
@@ -502,13 +520,13 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
 
           // Cancelado pelo comando ou pelo botão da notificação: não é um erro.
           if (cancelRequested || cancellationToken.isCancellationRequested) {
-            outputChannel.appendLine("\n\n[cancelado pelo utilizador]");
+            logLine("\n\n[cancelado pelo utilizador]");
             resolve({ ok: false, text: state.text });
             return;
           }
 
           if (code !== 0) {
-            outputChannel.appendLine(`\n[processo terminou com código ${code}]`);
+            logLine(`\n[processo terminou com código ${code}]`);
             vscode.window.showErrorMessage(
               `Claude CLI Lite: a CLI terminou com código ${code}. Vê o canal "Claude CLI Lite" para detalhes.`
             );
@@ -539,7 +557,7 @@ function handleStreamLine(line: string, state: StreamState): void {
   } catch {
     // A CLI pode emitir ocasionalmente linhas de debug não-JSON.
     // Escrevemos tal como vêm (sem as acumular na resposta), em vez de rebentar o parser.
-    outputChannel.append(line + "\n");
+    logAppend(line + "\n");
     return;
   }
 
@@ -561,7 +579,7 @@ function handleStreamLine(line: string, state: StreamState): void {
     parsed.event.delta?.type === "text_delta" &&
     typeof parsed.event.delta.text === "string"
   ) {
-    outputChannel.append(parsed.event.delta.text);
+    logRaw(state.redactor.push(parsed.event.delta.text));
     state.text += parsed.event.delta.text;
     state.receivedAnyDelta = true;
     return;
@@ -570,9 +588,12 @@ function handleStreamLine(line: string, state: StreamState): void {
   if (parsed.type === "result") {
     // Fallback: se nada foi transmitido em streaming, mostra o resultado final.
     if (!state.receivedAnyDelta && typeof parsed.result === "string") {
-      outputChannel.append(parsed.result);
+      logAppend(parsed.result);
       state.text = parsed.result;
     }
+
+    // O que ainda estava retido pelo redator sai antes da linha de uso.
+    logRaw(state.redactor.flush());
 
     const usage = parsed.usage;
     const parts: string[] = [];
@@ -583,7 +604,7 @@ function handleStreamLine(line: string, state: StreamState): void {
       parts.push(`custo: $${parsed.total_cost_usd.toFixed(4)}`);
     }
     if (parts.length > 0) {
-      outputChannel.appendLine(`\n\n[${parts.join(" · ")}]`);
+      logLine(`\n\n[${parts.join(" · ")}]`);
     }
 
     if (parsed.is_error) {
@@ -609,7 +630,7 @@ function reportSpawnFailure(err: NodeJS.ErrnoException | any, cliPath: string): 
     (typeof err?.message === "string" && /is not recognized|not found/i.test(err.message));
 
   if (notFound) {
-    outputChannel.appendLine(`\n[erro] CLI "${cliPath}" não encontrada.`);
+    logLine(`\n[erro] CLI "${cliPath}" não encontrada.`);
     vscode.window
       .showErrorMessage(
         `Claude CLI Lite: não foi possível encontrar a CLI "${cliPath}". Confirma que o Claude Code está instalado e no PATH, ou define o caminho completo nas definições.`,
@@ -623,8 +644,8 @@ function reportSpawnFailure(err: NodeJS.ErrnoException | any, cliPath: string): 
     return;
   }
 
-  outputChannel.appendLine(`\n[erro] ${err?.message ?? String(err)}`);
-  vscode.window.showErrorMessage(`Claude CLI Lite: erro ao executar a CLI — ${err?.message ?? String(err)}`);
+  logLine(`\n[erro] ${err?.message ?? String(err)}`);
+  vscode.window.showErrorMessage(`Claude CLI Lite: erro ao executar a CLI — ${redact(err?.message ?? String(err))}`);
 }
 
 // ---------------------------------------------------------------------------
