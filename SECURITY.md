@@ -11,6 +11,8 @@ Só a versão mais recente (a última versão menor publicada) recebe correçõe
 
 Inclua, se puder: a versão, o sistema operacional, os passos para reproduzir e o impacto que você viu.
 
+Se o botão **Report a vulnerability** não aparecer (o relato privado ainda pode não estar ligado neste repositório), abra uma issue pública pedindo um contato privado, **sem nenhum detalhe da falha**. Respondemos com um canal privado para você enviar o relato.
+
 ### O que esperar
 - Resposta inicial em até 7 dias (este é um projeto mantido por uma pessoa; o prazo é um objetivo, não uma garantia).
 - Avisamos quando houver correção e, com a sua permissão, damos o crédito no registro de mudanças.
@@ -32,6 +34,8 @@ Only the latest minor release receives security fixes.
 **Security → Report a vulnerability**, in this repository.
 
 Please include the version, operating system, steps to reproduce and the impact you observed.
+
+If the **Report a vulnerability** button does not appear (private reporting may not be enabled on this repository yet), open a public issue asking for a private contact, **without any details of the flaw**. We will reply with a private channel for you to send the report.
 
 ### What to expect
 - A first reply within 7 days (this is a one-person project; the target is a goal, not a guarantee).
