@@ -54,6 +54,11 @@ export interface ExtraArgsResult {
   rejected: Array<{ arg: string; reason: string }>;
 }
 
+/**
+ * Lista de recusa, não de permissão: uma flag que a CLI ganhar no futuro e não estiver
+ * na tabela acima passa. Por isso `extraArgs` fica em escopo de máquina, ignorado em
+ * workspace não confiável e sinalizado na barra de status como modo avançado.
+ */
 export function validateExtraArgs(extra: unknown): ExtraArgsResult {
   const result: ExtraArgsResult = { args: [], rejected: [] };
   if (extra === undefined || extra === null) {
@@ -69,7 +74,17 @@ export function validateExtraArgs(extra: unknown): ExtraArgsResult {
   for (const token of extra as string[]) {
     if (token.startsWith("-") && token !== "-") {
       const name = token.split("=")[0].toLowerCase();
-      const reason = FORBIDDEN[name];
+      let reason = FORBIDDEN[name];
+      // Letras juntas: "-pc" é "-p" e "-c" ao mesmo tempo. Cada letra do grupo é conferida.
+      if (!reason && /^-[^-]/.test(token)) {
+        for (const letter of token.slice(1).split("=")[0]) {
+          const found = FORBIDDEN[`-${letter.toLowerCase()}`];
+          if (found) {
+            reason = `${found} (a letra "${letter}" no grupo "${token}")`;
+            break;
+          }
+        }
+      }
       const hasInlineValue = token.includes("=");
       if (reason) {
         result.rejected.push({ arg: token, reason });

@@ -56,3 +56,18 @@ test("opções tipadas viram flags e as inválidas viram aviso", () => {
   assert.equal(bad.warnings.length, 3);
   assert.deepEqual(buildTypedArgs({ effort: "", fallbackModel: "", maxBudgetUsd: 0 }), { args: [], warnings: [] });
 });
+
+test("letras juntas não escapam da lista: -pc, -rc, -dp", () => {
+  for (const cluster of ["-pc", "-cp", "-rc", "-dp", "-xyr", "-pc=1", "-PC"]) {
+    const r = validateExtraArgs([cluster]);
+    assert.equal(r.rejected.length, 1, cluster);
+    assert.deepEqual(r.args, [], cluster);
+    assert.match(r.rejected[0].reason, /letra/, cluster);
+  }
+});
+
+test("letras juntas sem nenhuma flag proibida passam, e um número negativo como valor também", () => {
+  assert.deepEqual(validateExtraArgs(["-dv"]).rejected, []);
+  assert.deepEqual(validateExtraArgs(["-dv"]).args, ["-dv"]);
+  assert.deepEqual(validateExtraArgs(["--foo", "-5"]).rejected, []);
+});
