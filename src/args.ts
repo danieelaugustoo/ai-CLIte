@@ -42,10 +42,10 @@ const FORBIDDEN: Record<string, string> = {
   "--continue": "retomaria uma sessão gravada",
   "-c": "retomaria uma sessão gravada",
   "--session-id": "gravaria uma sessão",
-  "--model": "use a configuração claudeCliLite.model",
-  "--fallback-model": "use a configuração claudeCliLite.fallbackModel",
-  "--effort": "use a configuração claudeCliLite.effort",
-  "--max-budget-usd": "use a configuração claudeCliLite.maxBudgetUsd",
+  "--model": "use a configuração cliteAi.model",
+  "--fallback-model": "use a configuração cliteAi.fallbackModel",
+  "--effort": "use a configuração cliteAi.effort",
+  "--max-budget-usd": "use a configuração cliteAi.maxBudgetUsd",
   "--": "tudo depois dele viraria parte do prompt",
 };
 

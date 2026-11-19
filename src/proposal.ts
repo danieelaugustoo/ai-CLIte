@@ -1,6 +1,6 @@
 /**
  * Propostas de código do Claude: extração dos blocos da resposta, diff visual
- * (documento virtual `claude-proposal`) e rotinas Apply / Discard.
+ * (documento virtual `clite-ai-proposal`) e rotinas Apply / Discard.
  *
  * Nada abre sozinho: o utilizador é avisado e decide se quer ver o diff.
  */
@@ -8,7 +8,7 @@
 import * as vscode from "vscode";
 import type { Target } from "./conversation";
 
-const SCHEME = "claude-proposal";
+const SCHEME = "clite-ai-proposal";
 
 export interface CodeBlock {
   lang: string;
@@ -93,7 +93,7 @@ function buildProposedText(doc: vscode.TextDocument, range: vscode.Range, code: 
 // ---------------------------------------------------------------------------
 
 /**
- * Provedor de conteúdo do esquema `claude-proposal`. Em vez de guardar um
+ * Provedor de conteúdo do esquema `clite-ai-proposal`. Em vez de guardar um
  * texto fixo, abre o documento alvo (versão viva, incluindo alterações não
  * gravadas) e devolve-o com o trecho substituído. A URI mantém o caminho do
  * ficheiro real, por isso o editor aplica o syntax highlighting correto.
@@ -131,7 +131,7 @@ export function hasProposal(): boolean {
 
 /** Context key usada nos menus (botões ✓/✕ e Command Palette). */
 function setHasProposal(value: boolean): void {
-  vscode.commands.executeCommand("setContext", "claudeCliLite.hasProposal", value);
+  vscode.commands.executeCommand("setContext", "cliteAi.hasProposal", value);
   onChange();
 }
 
@@ -167,7 +167,7 @@ export async function offerProposal(responseText: string, target: Target | undef
 /** Abre o diff da proposta pendente (escolhendo o bloco, se houver vários). */
 export async function showProposal(): Promise<void> {
   if (!pending) {
-    vscode.window.showInformationMessage("Claude CLI Lite: não há alterações propostas.");
+    vscode.window.showInformationMessage("CLIte-ai: não há alterações propostas.");
     return;
   }
 
@@ -195,7 +195,7 @@ export async function showProposal(): Promise<void> {
   const { target } = pending;
   const doc = await vscode.workspace.openTextDocument(target.uri);
   if (!resolveRange(doc, target)) {
-    vscode.window.showErrorMessage("Claude CLI Lite: o trecho original mudou; não é seguro mostrar/aplicar a proposta.");
+    vscode.window.showErrorMessage("CLIte-ai: o trecho original mudou; não é seguro mostrar/aplicar a proposta.");
     return;
   }
 
@@ -203,13 +203,13 @@ export async function showProposal(): Promise<void> {
   const proposalUri = vscode.Uri.from({ scheme: SCHEME, path: target.uri.path, query: String(Date.now()) });
   pending.diffUri = proposalUri;
   const name = target.uri.path.split("/").pop() ?? "ficheiro";
-  await vscode.commands.executeCommand("vscode.diff", target.uri, proposalUri, `Claude: ${name} ↔ proposta`);
+  await vscode.commands.executeCommand("vscode.diff", target.uri, proposalUri, `CLIte-ai: ${name} ↔ proposta`);
 }
 
 /** Aplica a proposta ao ficheiro real (sem gravar) e limpa o estado. */
 export async function applyProposal(): Promise<void> {
   if (!pending || !pending.chosen) {
-    vscode.window.showInformationMessage("Claude CLI Lite: não há alterações propostas para aplicar.");
+    vscode.window.showInformationMessage("CLIte-ai: não há alterações propostas para aplicar.");
     return;
   }
   const { target, chosen } = pending;
@@ -217,7 +217,7 @@ export async function applyProposal(): Promise<void> {
   const doc = await vscode.workspace.openTextDocument(target.uri);
   const range = resolveRange(doc, target);
   if (!range) {
-    vscode.window.showErrorMessage("Claude CLI Lite: o trecho original mudou; não é seguro aplicar.");
+    vscode.window.showErrorMessage("CLIte-ai: o trecho original mudou; não é seguro aplicar.");
     return;
   }
 
@@ -228,7 +228,7 @@ export async function applyProposal(): Promise<void> {
   edit.replace(target.uri, range, code);
   const ok = await vscode.workspace.applyEdit(edit);
   if (!ok) {
-    vscode.window.showErrorMessage("Claude CLI Lite: não foi possível aplicar as alterações.");
+    vscode.window.showErrorMessage("CLIte-ai: não foi possível aplicar as alterações.");
     return;
   }
 
@@ -248,7 +248,7 @@ export async function discardProposal(): Promise<void> {
     return;
   }
   await clearPending();
-  vscode.window.setStatusBarMessage("Claude CLI Lite: alterações descartadas.", 3000);
+  vscode.window.setStatusBarMessage("CLIte-ai: alterações descartadas.", 3000);
 }
 
 /** Limpa a proposta pendente e fecha o separador do diff, se estiver aberto. */

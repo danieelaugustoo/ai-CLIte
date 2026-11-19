@@ -1,6 +1,6 @@
 {
-  "name": "claude-cli-lite",
-  "displayName": "Claude CLI Lite",
+  "name": "clite-ai",
+  "displayName": "CLIte-ai",
   "description": "Ponte leve entre o editor e a instalação global do Claude Code (CLI) — sem contexto fantasma, sem chaves de API, sem SDKs de IA embutidos.",
   "version": "0.2.3",
   "license": "Apache-2.0",
@@ -17,10 +17,10 @@
       "supported": "limited",
       "description": "Em workspace não confiável a extensão roda em modo estrito: a CLI usa uma pasta temporária vazia e os argumentos extras são ignorados.",
       "restrictedConfigurations": [
-        "claudeCliLite.cliPath",
-        "claudeCliLite.extraArgs",
-        "claudeCliLite.model",
-        "claudeCliLite.includeGitContext"
+        "cliteAi.cliPath",
+        "cliteAi.extraArgs",
+        "cliteAi.model",
+        "cliteAi.includeGitContext"
       ]
     },
     "virtualWorkspaces": false
@@ -28,61 +28,61 @@
   "contributes": {
     "commands": [
       {
-        "command": "claudeCliLite.askSelection",
-        "title": "Claude: Nova pergunta sobre seleção"
+        "command": "cliteAi.askSelection",
+        "title": "CLIte-ai: Nova pergunta sobre seleção"
       },
       {
-        "command": "claudeCliLite.continueConversation",
-        "title": "Claude: Continuar conversa"
+        "command": "cliteAi.continueConversation",
+        "title": "CLIte-ai: Continuar conversa"
       },
       {
-        "command": "claudeCliLite.clearConversation",
-        "title": "Claude: Limpar conversa"
+        "command": "cliteAi.clearConversation",
+        "title": "CLIte-ai: Limpar conversa"
       },
       {
-        "command": "claudeCliLite.addToContext",
-        "title": "Claude: Adicionar ao contexto"
+        "command": "cliteAi.addToContext",
+        "title": "CLIte-ai: Adicionar ao contexto"
       },
       {
-        "command": "claudeCliLite.manageContext",
-        "title": "Claude: Gerir ficheiros do contexto"
+        "command": "cliteAi.manageContext",
+        "title": "CLIte-ai: Gerir ficheiros do contexto"
       },
       {
-        "command": "claudeCliLite.clearContext",
-        "title": "Claude: Limpar contexto"
+        "command": "cliteAi.clearContext",
+        "title": "CLIte-ai: Limpar contexto"
       },
       {
-        "command": "claudeCliLite.showProposal",
-        "title": "Claude: Ver alterações propostas"
+        "command": "cliteAi.showProposal",
+        "title": "CLIte-ai: Ver alterações propostas"
       },
       {
-        "command": "claudeCliLite.applyProposal",
-        "title": "Claude: Aplicar alterações",
+        "command": "cliteAi.applyProposal",
+        "title": "CLIte-ai: Aplicar alterações",
         "icon": "$(check)"
       },
       {
-        "command": "claudeCliLite.discardProposal",
-        "title": "Claude: Descartar alterações",
+        "command": "cliteAi.discardProposal",
+        "title": "CLIte-ai: Descartar alterações",
         "icon": "$(close)"
       },
       {
-        "command": "claudeCliLite.statusMenu",
-        "title": "Claude: Estado"
+        "command": "cliteAi.statusMenu",
+        "title": "CLIte-ai: Estado"
       },
       {
-        "command": "claudeCliLite.cancel",
-        "title": "Claude: Cancelar pedido"
+        "command": "cliteAi.cancel",
+        "title": "CLIte-ai: Cancelar pedido"
       }
     ],
     "keybindings": [
       {
-        "command": "claudeCliLite.askSelection",
+        "command": "cliteAi.askSelection",
         "key": "ctrl+shift+c",
         "mac": "cmd+shift+c",
         "when": "editorTextFocus && editorHasSelection"
       },
       {
-        "command": "claudeCliLite.continueConversation",
+        "command": "cliteAi.continueConversation",
         "key": "ctrl+alt+c",
         "mac": "cmd+alt+c",
         "when": "editorTextFocus"
@@ -91,62 +91,62 @@
     "menus": {
       "editor/context": [
         {
-          "command": "claudeCliLite.askSelection",
+          "command": "cliteAi.askSelection",
           "when": "editorHasSelection",
           "group": "9_cutcopypaste"
         },
         {
-          "command": "claudeCliLite.continueConversation",
+          "command": "cliteAi.continueConversation",
           "when": "editorTextFocus",
           "group": "9_cutcopypaste"
         }
       ],
       "explorer/context": [
         {
-          "command": "claudeCliLite.addToContext",
+          "command": "cliteAi.addToContext",
           "when": "!explorerResourceIsFolder",
           "group": "claude@1"
         }
       ],
       "editor/title/context": [
         {
-          "command": "claudeCliLite.addToContext",
+          "command": "cliteAi.addToContext",
           "group": "claude@1"
         }
       ],
       "editor/title": [
         {
-          "command": "claudeCliLite.applyProposal",
-          "when": "resourceScheme == claude-proposal",
+          "command": "cliteAi.applyProposal",
+          "when": "resourceScheme == clite-ai-proposal",
           "group": "navigation@1"
         },
         {
-          "command": "claudeCliLite.discardProposal",
-          "when": "resourceScheme == claude-proposal",
+          "command": "cliteAi.discardProposal",
+          "when": "resourceScheme == clite-ai-proposal",
           "group": "navigation@2"
         }
       ],
       "commandPalette": [
         {
-          "command": "claudeCliLite.applyProposal",
-          "when": "claudeCliLite.hasProposal"
+          "command": "cliteAi.applyProposal",
+          "when": "cliteAi.hasProposal"
         },
         {
-          "command": "claudeCliLite.discardProposal",
-          "when": "claudeCliLite.hasProposal"
+          "command": "cliteAi.discardProposal",
+          "when": "cliteAi.hasProposal"
         }
       ]
     },
     "configuration": {
-      "title": "Claude CLI Lite",
+      "title": "CLIte-ai",
       "properties": {
-        "claudeCliLite.cliPath": {
+        "cliteAi.cliPath": {
           "type": "string",
           "scope": "machine",
           "default": "claude",
           "description": "Caminho para o executável da CLI global do Claude Code. Deixe \"claude\" se estiver no PATH, ou indique o caminho completo (ex.: C:\\Users\\<user>\\AppData\\Roaming\\npm\\claude.cmd)."
         },
-        "claudeCliLite.model": {
+        "cliteAi.model": {
           "type": "string",
           "default": "",
           "description": "Modelo a usar (ex.: \"sonnet\", \"opus\"). Deixe vazio para usar o modelo por defeito da CLI.",
@@ -154,7 +154,7 @@
           "pattern": "^[A-Za-z0-9._:/\\[\\]-]{0,100}$",
           "patternErrorMessage": "Use só letras, números e . _ : / [ ] - (até 100 caracteres)."
         },
-        "claudeCliLite.effort": {
+        "cliteAi.effort": {
           "type": "string",
           "scope": "machine",
           "default": "",
@@ -168,7 +168,7 @@
           ],
           "description": "Nível de esforço do modelo (--effort). Vazio usa o padrão da CLI."
         },
-        "claudeCliLite.fallbackModel": {
+        "cliteAi.fallbackModel": {
           "type": "string",
           "scope": "machine",
           "default": "",
@@ -176,7 +176,7 @@
           "patternErrorMessage": "Use só letras, números e . _ : / [ ] - (até 100 caracteres).",
           "description": "Modelo de reserva (--fallback-model), usado se o principal falhar. Vazio desliga."
         },
-        "claudeCliLite.maxBudgetUsd": {
+        "cliteAi.maxBudgetUsd": {
           "type": "number",
           "scope": "machine",
           "default": 0,
@@ -184,7 +184,7 @@
           "maximum": 10000,
           "description": "Gasto máximo em dólares por pedido (--max-budget-usd). 0 desliga."
         },
-        "claudeCliLite.extraArgs": {
+        "cliteAi.extraArgs": {
           "type": "array",
           "scope": "machine",
           "items": {
@@ -193,7 +193,7 @@
           "default": [],
           "description": "MODO AVANÇADO. Argumentos extras para a CLI, no fim da chamada. Flags que mexeriam em ferramentas, MCP, permissões, login ou formato da saída são sempre recusadas, e argumentos soltos também. Ignorados em workspace não confiável."
         },
-        "claudeCliLite.extraEnvNames": {
+        "cliteAi.extraEnvNames": {
           "type": "array",
           "scope": "machine",
           "items": {
@@ -202,44 +202,44 @@
           "default": [],
           "description": "Nomes de variáveis de ambiente que a CLI também pode receber, além da lista padrão (por exemplo AWS_PROFILE e AWS_REGION, para quem usa o Bedrock). Só os nomes; os valores vêm do ambiente do VS Code."
         },
-        "claudeCliLite.includeGitContext": {
+        "cliteAi.includeGitContext": {
           "type": "boolean",
           "scope": "machine",
           "default": false,
           "description": "Se ligado, a CLI roda na pasta do projeto em vez de uma pasta temporária vazia, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Desligado por padrão."
         },
-        "claudeCliLite.alwaysPreview": {
+        "cliteAi.alwaysPreview": {
           "type": "boolean",
           "scope": "machine",
           "default": false,
           "description": "Se ligado, mostra a prévia do que vai ser enviado antes de TODO pedido. Por padrão ela aparece só no primeiro uso."
         },
-        "claudeCliLite.timeoutIdleSeconds": {
+        "cliteAi.timeoutIdleSeconds": {
           "type": "number",
           "scope": "machine",
           "default": 180,
           "minimum": 0,
           "description": "Encerra o pedido se a CLI ficar este tempo (em segundos) sem enviar nada. 0 desliga."
         },
-        "claudeCliLite.timeoutTotalSeconds": {
+        "cliteAi.timeoutTotalSeconds": {
           "type": "number",
           "scope": "machine",
           "default": 1200,
           "minimum": 0,
           "description": "Encerra o pedido se ele passar deste tempo total (em segundos). 0 desliga."
         },
-        "claudeCliLite.historyMaxTurns": {
+        "cliteAi.historyMaxTurns": {
           "type": "number",
           "default": 3,
           "minimum": 1,
           "description": "Nº máximo de pares pergunta/resposta guardados na memória da conversa."
         },
-        "claudeCliLite.historyMaxChars": {
+        "cliteAi.historyMaxChars": {
           "type": "number",
           "default": 20000,
           "description": "Limite total de caracteres do histórico; descarta primeiro os turnos mais antigos."
         },
-        "claudeCliLite.contextMaxChars": {
+        "cliteAi.contextMaxChars": {
           "type": "number",
           "default": 60000,
           "description": "Acima deste total de caracteres nos ficheiros do contexto, pede confirmação antes de enviar."

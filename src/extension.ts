@@ -1,5 +1,5 @@
 /**
- * Claude CLI Lite
+ * CLIte-ai
  * ----------------
  * Ponte leve e "burra" entre o editor e a instalação global do Claude Code (CLI).
  *
@@ -30,6 +30,7 @@ import * as proposal from "./proposal";
 import { isValidModel, nonNegativeNumberOr } from "./validation";
 import { redact, StreamRedactor } from "./secrets";
 import { buildPreview } from "./preview";
+import { migrateOnce } from "./migration";
 import { cancellableWait, Cancellable } from "./waiting";
 import { buildTypedArgs, validateExtraArgs } from "./args";
 import { buildChildEnv } from "./env";
@@ -61,7 +62,7 @@ let statusBar: vscode.StatusBarItem;
 let extContext: vscode.ExtensionContext;
 
 // Prévia do envio: documento virtual somente leitura (S7).
-const PREVIEW_SCHEME = "claude-cli-lite-preview";
+const PREVIEW_SCHEME = "clite-ai-preview";
 const previewContents = new Map<string, string>();
 let previewCounter = 0;
 
@@ -92,7 +93,7 @@ async function confirmPreview(text: string): Promise<boolean> {
     pendingPreview = cancellableWait(
       Promise.resolve(
         vscode.window.showInformationMessage(
-          "Claude CLI Lite: revise o que vai ser enviado (aberto ao lado). Enviar?",
+          "CLIte-ai: revise o que vai ser enviado (aberto ao lado). Enviar?",
           "Enviar",
           "Cancelar"
         )
@@ -128,12 +129,14 @@ function logRaw(text: string): void {
 
 export function activate(context: vscode.ExtensionContext): void {
   extContext = context;
+  // Copia as configurações do prefixo antigo (ver migration.ts), uma vez. Não bloqueia a ativação.
+  void migrateOnce(context);
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, new PreviewProvider()));
-  outputChannel = vscode.window.createOutputChannel("Claude CLI Lite");
+  outputChannel = vscode.window.createOutputChannel("CLIte-ai");
   context.subscriptions.push(outputChannel);
 
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  statusBar.command = "claudeCliLite.statusMenu";
+  statusBar.command = "cliteAi.statusMenu";
   context.subscriptions.push(statusBar);
 
   // Os módulos avisam-nos quando o estado muda, para refrescarmos a barra.
@@ -143,22 +146,22 @@ export function activate(context: vscode.ExtensionContext): void {
   proposal.register(context);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("claudeCliLite.askSelection", () => ask("new")),
-    vscode.commands.registerCommand("claudeCliLite.continueConversation", () => ask("continue")),
-    vscode.commands.registerCommand("claudeCliLite.clearConversation", clearConversation),
-    vscode.commands.registerCommand("claudeCliLite.addToContext", cart.addToContext),
-    vscode.commands.registerCommand("claudeCliLite.manageContext", cart.manageContext),
-    vscode.commands.registerCommand("claudeCliLite.clearContext", cart.clearContext),
-    vscode.commands.registerCommand("claudeCliLite.showProposal", proposal.showProposal),
-    vscode.commands.registerCommand("claudeCliLite.applyProposal", proposal.applyProposal),
-    vscode.commands.registerCommand("claudeCliLite.discardProposal", proposal.discardProposal),
-    vscode.commands.registerCommand("claudeCliLite.statusMenu", statusMenu),
-    vscode.commands.registerCommand("claudeCliLite.cancel", cancelCurrent)
+    vscode.commands.registerCommand("cliteAi.askSelection", () => ask("new")),
+    vscode.commands.registerCommand("cliteAi.continueConversation", () => ask("continue")),
+    vscode.commands.registerCommand("cliteAi.clearConversation", clearConversation),
+    vscode.commands.registerCommand("cliteAi.addToContext", cart.addToContext),
+    vscode.commands.registerCommand("cliteAi.manageContext", cart.manageContext),
+    vscode.commands.registerCommand("cliteAi.clearContext", cart.clearContext),
+    vscode.commands.registerCommand("cliteAi.showProposal", proposal.showProposal),
+    vscode.commands.registerCommand("cliteAi.applyProposal", proposal.applyProposal),
+    vscode.commands.registerCommand("cliteAi.discardProposal", proposal.discardProposal),
+    vscode.commands.registerCommand("cliteAi.statusMenu", statusMenu),
+    vscode.commands.registerCommand("cliteAi.cancel", cancelCurrent)
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("claudeCliLite.extraArgs")) {
+      if (e.affectsConfiguration("cliteAi.extraArgs")) {
         updateStatusBar();
       }
     })
@@ -195,8 +198,8 @@ async function ask(mode: "new" | "continue"): Promise<void> {
   if (askInFlight || activeRequest) {
     vscode.window.showWarningMessage(
       pendingPreview
-        ? "Claude CLI Lite: há uma prévia aguardando a sua resposta (aberta ao lado). Responda Enviar ou Cancelar, ou rode Claude: Cancelar pedido."
-        : "Claude CLI Lite: já há um pedido em curso. Cancela-o (Claude: Cancelar pedido) antes de iniciar outro."
+        ? "CLIte-ai: há uma prévia aguardando a sua resposta (aberta ao lado). Responda Enviar ou Cancelar, ou rode CLIte-ai: Cancelar pedido."
+        : "CLIte-ai: já há um pedido em curso. Cancela-o (CLIte-ai: Cancelar pedido) antes de iniciar outro."
     );
     return;
   }
@@ -213,7 +216,7 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
   if (rejected.length > 0) {
     const list = rejected.slice(0, 3).map((r) => `${r.arg} (${r.reason})`).join("; ");
     vscode.window.showErrorMessage(
-      `Claude CLI Lite: claudeCliLite.extraArgs tem argumentos que não são permitidos: ${list}. Corrija as configurações antes de continuar.`
+      `CLIte-ai: cliteAi.extraArgs tem argumentos que não são permitidos: ${list}. Corrija as configurações antes de continuar.`
     );
     return;
   }
@@ -231,15 +234,15 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
 
   if (mode === "new") {
     if (!editor) {
-      vscode.window.showWarningMessage("Claude CLI Lite: nenhum editor ativo.");
+      vscode.window.showWarningMessage("CLIte-ai: nenhum editor ativo.");
       return;
     }
     if (!hasSelection) {
-      vscode.window.showWarningMessage("Claude CLI Lite: seleciona algum código primeiro.");
+      vscode.window.showWarningMessage("CLIte-ai: seleciona algum código primeiro.");
       return;
     }
   } else if (!hasSelection && conversation.getTurns().length === 0) {
-    vscode.window.showWarningMessage("Claude CLI Lite: não há conversa; usa \"Nova pergunta sobre seleção\".");
+    vscode.window.showWarningMessage("CLIte-ai: não há conversa; usa \"Nova pergunta sobre seleção\".");
     return;
   }
 
@@ -308,7 +311,7 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
   try {
     run = prepareRunDir(cwdUri);
   } catch (err: any) {
-    vscode.window.showErrorMessage(`Claude CLI Lite: não foi possível criar a pasta temporária (${redact(err?.message ?? String(err))}).`);
+    vscode.window.showErrorMessage(`CLIte-ai: não foi possível criar a pasta temporária (${redact(err?.message ?? String(err))}).`);
     return;
   }
 
@@ -318,17 +321,17 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
   try {
     if (Buffer.byteLength(prompt, "utf8") > MAX_INPUT_BYTES) {
       vscode.window.showErrorMessage(
-        `Claude CLI Lite: o texto a enviar passa de ${Math.round(MAX_INPUT_BYTES / (1024 * 1024))} MB, que é o limite. Tire arquivos do contexto ou reduza a seleção.`
+        `CLIte-ai: o texto a enviar passa de ${Math.round(MAX_INPUT_BYTES / (1024 * 1024))} MB, que é o limite. Tire arquivos do contexto ou reduza a seleção.`
       );
       return;
     }
 
     // Prévia do que vai ser enviado: no primeiro uso, e sempre que `alwaysPreview` estiver ligado.
-    const alwaysPreview = vscode.workspace.getConfiguration("claudeCliLite").get<boolean>("alwaysPreview", false);
+    const alwaysPreview = vscode.workspace.getConfiguration("cliteAi").get<boolean>("alwaysPreview", false);
     if (alwaysPreview || !extContext.globalState.get<boolean>("previewShown.claude", false)) {
       const previewText = buildPreview({
         engine: "Claude Code CLI",
-        model: vscode.workspace.getConfiguration("claudeCliLite").get<string>("model", "").trim(),
+        model: vscode.workspace.getConfiguration("cliteAi").get<string>("model", "").trim(),
         cwdMode: run.mode,
         workspaceTrusted: vscode.workspace.isTrusted,
         args: buildArgs(true),
@@ -338,7 +341,7 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
         historyChars,
         selectionChars: selectedText.length,
         notes: [...cartNow.notes, ...run.notes],
-        envNames: buildChildEnv(process.env, vscode.workspace.getConfiguration("claudeCliLite").get<string[]>("extraEnvNames", [])).names,
+        envNames: buildChildEnv(process.env, vscode.workspace.getConfiguration("cliteAi").get<string[]>("extraEnvNames", [])).names,
       });
       const approved = await confirmPreview(previewText);
       if (!approved) {
@@ -366,7 +369,7 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
 
 function clearConversation(): void {
   conversation.clear();
-  vscode.window.showInformationMessage("Claude CLI Lite: conversa limpa.");
+  vscode.window.showInformationMessage("CLIte-ai: conversa limpa.");
 }
 
 function cancelCurrent(): void {
@@ -376,7 +379,7 @@ function cancelCurrent(): void {
     return;
   }
   if (!activeRequest) {
-    vscode.window.showInformationMessage("Claude CLI Lite: não há nenhum pedido em curso.");
+    vscode.window.showInformationMessage("CLIte-ai: não há nenhum pedido em curso.");
     return;
   }
   activeRequest.cancelled = true;
@@ -396,7 +399,7 @@ function updateStatusBar(): void {
   const turns = conversation.getTurns().length;
   const files = cart.count();
   // Aviso permanente enquanto houver argumentos extras configurados (modo avançado).
-  const extra = vscode.workspace.getConfiguration("claudeCliLite").get<unknown>("extraArgs", []);
+  const extra = vscode.workspace.getConfiguration("cliteAi").get<unknown>("extraArgs", []);
   const advanced = Array.isArray(extra) && extra.length > 0;
   if (turns === 0 && files === 0 && !advanced) {
     statusBar.hide();
@@ -404,22 +407,22 @@ function updateStatusBar(): void {
   }
   statusBar.text = `${advanced ? "$(warning) " : ""}$(comment-discussion) ${turns}  $(file) ${files}`;
   statusBar.tooltip =
-    `Claude CLI Lite: ${turns} turno(s) na conversa · ${files} ficheiro(s) no contexto` +
-    (advanced ? " · MODO AVANÇADO: há argumentos extras da CLI configurados (claudeCliLite.extraArgs)" : "");
+    `CLIte-ai: ${turns} turno(s) na conversa · ${files} ficheiro(s) no contexto` +
+    (advanced ? " · MODO AVANÇADO: há argumentos extras da CLI configurados (cliteAi.extraArgs)" : "");
   statusBar.show();
 }
 
 async function statusMenu(): Promise<void> {
   const items: (vscode.QuickPickItem & { command: string })[] = [
-    { label: "Continuar conversa", command: "claudeCliLite.continueConversation" },
-    { label: "Limpar conversa", command: "claudeCliLite.clearConversation" },
-    { label: "Gerir contexto", command: "claudeCliLite.manageContext" },
-    { label: "Limpar contexto", command: "claudeCliLite.clearContext" },
+    { label: "Continuar conversa", command: "cliteAi.continueConversation" },
+    { label: "Limpar conversa", command: "cliteAi.clearConversation" },
+    { label: "Gerir contexto", command: "cliteAi.manageContext" },
+    { label: "Limpar contexto", command: "cliteAi.clearContext" },
   ];
   if (proposal.hasProposal()) {
-    items.push({ label: "Ver alterações propostas", command: "claudeCliLite.showProposal" });
+    items.push({ label: "Ver alterações propostas", command: "cliteAi.showProposal" });
   }
-  const picked = await vscode.window.showQuickPick(items, { placeHolder: "Claude CLI Lite" });
+  const picked = await vscode.window.showQuickPick(items, { placeHolder: "CLIte-ai" });
   if (picked) {
     await vscode.commands.executeCommand(picked.command);
   }
@@ -430,7 +433,7 @@ async function statusMenu(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function buildArgs(quiet = false): string[] {
-  const config = vscode.workspace.getConfiguration("claudeCliLite");
+  const config = vscode.workspace.getConfiguration("cliteAi");
   const model = config.get<string>("model", "").trim();
 
   const args = [
@@ -459,7 +462,7 @@ function buildArgs(quiet = false): string[] {
     } else if (!quiet) {
       // Nunca repassamos um valor estranho à CLI.
       vscode.window.showWarningMessage(
-        "Claude CLI Lite: o nome do modelo tem caracteres não permitidos e foi ignorado. Corrija em claudeCliLite.model."
+        "CLIte-ai: o nome do modelo tem caracteres não permitidos e foi ignorado. Corrija em cliteAi.model."
       );
     }
   }
@@ -471,7 +474,7 @@ function buildArgs(quiet = false): string[] {
     maxBudgetUsd: config.get<number>("maxBudgetUsd", 0),
   });
   if (!quiet && typed.warnings.length > 0) {
-    vscode.window.showWarningMessage(`Claude CLI Lite: ${typed.warnings.join("; ")}.`);
+    vscode.window.showWarningMessage(`CLIte-ai: ${typed.warnings.join("; ")}.`);
   }
   args.push(...typed.args);
 
@@ -486,7 +489,7 @@ function rejectedExtraArgs(): Array<{ arg: string; reason: string }> {
   if (!vscode.workspace.isTrusted) {
     return []; // em workspace não confiável os extras são ignorados de qualquer jeito
   }
-  return validateExtraArgs(vscode.workspace.getConfiguration("claudeCliLite").get<unknown>("extraArgs", [])).rejected;
+  return validateExtraArgs(vscode.workspace.getConfiguration("cliteAi").get<unknown>("extraArgs", [])).rejected;
 }
 
 /** Pasta onde a CLI roda neste pedido, com o aviso para o canal e a limpeza. */
@@ -503,7 +506,7 @@ interface RunDir {
  * `includeGitContext` (configuração de máquina) E o workspace é confiável.
  */
 function prepareRunDir(uri: vscode.Uri | undefined): RunDir {
-  const includeGit = vscode.workspace.getConfiguration("claudeCliLite").get<boolean>("includeGitContext", false);
+  const includeGit = vscode.workspace.getConfiguration("cliteAi").get<boolean>("includeGitContext", false);
   if (includeGit && vscode.workspace.isTrusted && uri) {
     const folder = vscode.workspace.getWorkspaceFolder(uri);
     if (folder) {
@@ -516,7 +519,7 @@ function prepareRunDir(uri: vscode.Uri | undefined): RunDir {
     }
   }
 
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-cli-lite-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clite-ai-"));
   return {
     cwd: dir,
     mode: "neutra",
@@ -578,7 +581,7 @@ interface StreamState {
 
 /** `headerLines` são escritas no canal antes do comando (resumo do contexto, avisos do carrinho). */
 async function runClaude(prompt: string, cwd: string, headerLines: string[] = []): Promise<RunResult> {
-  const config = vscode.workspace.getConfiguration("claudeCliLite");
+  const config = vscode.workspace.getConfiguration("cliteAi");
   const cliPath = config.get<string>("cliPath", "claude").trim() || "claude";
   const args = buildArgs();
   const childEnv = buildChildEnv(process.env, config.get<string[]>("extraEnvNames", []));
@@ -600,7 +603,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
   return vscode.window.withProgress<RunResult>(
     {
       location: vscode.ProgressLocation.Notification,
-      title: "Claude CLI Lite",
+      title: "CLIte-ai",
       cancellable: true,
     },
     (progress, cancellationToken) => {
@@ -709,7 +712,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
           if (state.initViolation) {
             logLine(`\n[pedido abortado por segurança] ${state.initViolation}.`);
             vscode.window.showErrorMessage(
-              `Claude CLI Lite: pedido abortado por segurança (${state.initViolation}). Veja o canal "Claude CLI Lite".`
+              `CLIte-ai: pedido abortado por segurança (${state.initViolation}). Veja o canal "CLIte-ai".`
             );
             finish({ ok: false, text: "" });
             return;
@@ -725,14 +728,14 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
           if (timeoutKind) {
             const motivo = timeoutKind === "idle" ? "sem nenhuma resposta por tempo demais" : "passou do tempo total permitido";
             logLine(`\n\n[pedido encerrado: ${motivo}]`);
-            vscode.window.showErrorMessage(`Claude CLI Lite: pedido encerrado (${motivo}). Os limites estão em timeoutIdleSeconds e timeoutTotalSeconds.`);
+            vscode.window.showErrorMessage(`CLIte-ai: pedido encerrado (${motivo}). Os limites estão em timeoutIdleSeconds e timeoutTotalSeconds.`);
             finish({ ok: false, text: "" });
             return;
           }
 
           if (outputExceeded) {
             logLine("\n\n[resposta cortada: passou do limite de tamanho]");
-            vscode.window.showErrorMessage("Claude CLI Lite: a resposta passou do limite de tamanho e foi descartada.");
+            vscode.window.showErrorMessage("CLIte-ai: a resposta passou do limite de tamanho e foi descartada.");
             finish({ ok: false, text: "" });
             return;
           }
@@ -744,7 +747,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
           if (code !== 0) {
             logLine(`\n[processo terminou com código ${code}]`);
             vscode.window.showErrorMessage(
-              `Claude CLI Lite: a CLI terminou com código ${code}. Vê o canal "Claude CLI Lite" para detalhes.`
+              `CLIte-ai: a CLI terminou com código ${code}. Vê o canal "CLIte-ai" para detalhes.`
             );
           }
 
@@ -825,7 +828,7 @@ function handleStreamLine(line: string, state: StreamState): void {
 
     if (parsed.is_error) {
       state.isError = true;
-      vscode.window.showWarningMessage("Claude CLI Lite: a CLI reportou um erro. Vê o canal para detalhes.");
+      vscode.window.showWarningMessage("CLIte-ai: a CLI reportou um erro. Vê o canal para detalhes.");
     }
 
     return;
@@ -849,19 +852,19 @@ function reportSpawnFailure(err: NodeJS.ErrnoException | any, cliPath: string): 
     logLine(`\n[erro] CLI "${cliPath}" não encontrada.`);
     vscode.window
       .showErrorMessage(
-        `Claude CLI Lite: não foi possível encontrar a CLI "${cliPath}". Confirma que o Claude Code está instalado e no PATH, ou define o caminho completo nas definições.`,
+        `CLIte-ai: não foi possível encontrar a CLI "${cliPath}". Confirma que o Claude Code está instalado e no PATH, ou define o caminho completo nas definições.`,
         "Abrir definições"
       )
       .then((choice) => {
         if (choice === "Abrir definições") {
-          vscode.commands.executeCommand("workbench.action.openSettings", "claudeCliLite.cliPath");
+          vscode.commands.executeCommand("workbench.action.openSettings", "cliteAi.cliPath");
         }
       });
     return;
   }
 
   logLine(`\n[erro] ${err?.message ?? String(err)}`);
-  vscode.window.showErrorMessage(`Claude CLI Lite: erro ao executar a CLI — ${redact(err?.message ?? String(err))}`);
+  vscode.window.showErrorMessage(`CLIte-ai: erro ao executar a CLI — ${redact(err?.message ?? String(err))}`);
 }
 
 /** Formatação simples só para o log do comando executado no OutputChannel. */

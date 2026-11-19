@@ -36,7 +36,7 @@ export function estimateTokens(chars: number): number {
 
 export function buildPreview(i: PreviewInput): string {
   const lines: string[] = [];
-  lines.push("CLAUDE CLI LITE: O QUE VAI SER ENVIADO");
+  lines.push("CLITE-AI: O QUE VAI SER ENVIADO");
   lines.push("");
   lines.push(`Motor: ${i.engine}`);
   lines.push(`Modelo: ${i.model || "(o padrão da CLI)"}`);

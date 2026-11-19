@@ -10,4 +10,4 @@ export function isPlatformBlocked(platform: string, windowsVerified: boolean = W
 }
 
 export const PLATFORM_BLOCKED_MESSAGE =
-  "Claude CLI Lite ainda não foi verificado no Windows e por segurança está bloqueado aqui. Use Linux ou macOS por enquanto.";
+  "CLIte-ai ainda não foi verificado no Windows e por segurança está bloqueado aqui. Use Linux ou macOS por enquanto.";
