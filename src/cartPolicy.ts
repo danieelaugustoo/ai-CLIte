@@ -17,8 +17,9 @@ const SENSITIVE_NAMES: RegExp[] = [
   /^\.envrc$/i,
   /\.(pem|key|p12|pfx|jks|keystore|kdbx|gpg|ovpn)$/i,
   /^id_(rsa|dsa|ecdsa|ed25519)$/i,
-  /^credentials(\..+)?$/i,
-  /^\.?secrets?(\..+)?$/i,
+  // Só nomes sem extensão ou com extensão de dados: "secrets.ts" e "credentials.service.ts" são código.
+  /^credentials(\.(json|ya?ml|toml|ini|txt|csv|xml|env|enc))?$/i,
+  /^\.?secrets?(\.(json|ya?ml|toml|ini|txt|csv|xml|env|enc))?$/i,
   /^\.(npmrc|netrc|pypirc|pgpass|git-credentials|htpasswd)$/i,
   /\.(tfstate|tfvars)$/i,
   /^service-?account.*\.json$/i,
@@ -65,21 +66,40 @@ export interface HiddenFinding {
   line: number;
 }
 
+const EMOJI_LIKE = /[\p{Extended_Pictographic}\u{FE0F}\u{1F3FB}-\u{1F3FF}]/u;
+/** Escritas em que o ZWNJ (U+200C) é parte normal do texto. */
+const ZWNJ_SCRIPTS =
+  /[\p{Script=Arabic}\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gujarati}\p{Script=Gurmukhi}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Oriya}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Sinhala}]/u;
+
 /**
  * Acha caracteres de controle de direção (bidi) e invisíveis. Eles permitem
  * esconder texto ou fazer o código parecer outra coisa ("Trojan Source").
+ * O ZWJ (U+200D) dentro de uma sequência de emoji e o ZWNJ (U+200C) entre letras
+ * de escritas que o usam (persa, hindi...) são normais e não contam.
  * Devolve no máximo 5 ocorrências.
  */
 export function findHiddenChars(text: string): HiddenFinding[] {
   const found: HiddenFinding[] = [];
+  const chars = Array.from(text); // por ponto de código, para os emoji de 2 unidades
   let line = 1;
-  for (let i = 0; i < text.length && found.length < 5; i++) {
-    const c = text.charCodeAt(i);
+  for (let i = 0; i < chars.length && found.length < 5; i++) {
+    const ch = chars[i];
+    const c = ch.codePointAt(0) as number;
     if (c === 10) {
       line++;
     } else if ((c >= 0x202a && c <= 0x202e) || (c >= 0x2066 && c <= 0x2069)) {
       found.push({ kind: "bidi", line });
-    } else if ((c >= 0x200b && c <= 0x200d) || c === 0x2060 || (c === 0xfeff && i > 0)) {
+    } else if (c === 0x200d) {
+      const legit = EMOJI_LIKE.test(chars[i - 1] ?? "") && EMOJI_LIKE.test(chars[i + 1] ?? "");
+      if (!legit) {
+        found.push({ kind: "invisível", line });
+      }
+    } else if (c === 0x200c) {
+      const legit = ZWNJ_SCRIPTS.test(chars[i - 1] ?? "") && ZWNJ_SCRIPTS.test(chars[i + 1] ?? "");
+      if (!legit) {
+        found.push({ kind: "invisível", line });
+      }
+    } else if (c === 0x200b || c === 0x2060 || (c === 0xfeff && i > 0)) {
       found.push({ kind: "invisível", line });
     }
   }

@@ -6,14 +6,14 @@ test("reconhece arquivos sensíveis pelo nome e pela pasta", () => {
   for (const f of [
     "/p/.env", "/p/.env.local", "/p/.env.production", "C:\\p\\.env", "/p/key.pem", "/p/server.key",
     "/home/u/.ssh/config", "/home/u/id_rsa", "/p/credentials.json", "/p/.npmrc", "/p/.aws/credentials",
-    "/p/terraform.tfstate", "/p/prod.tfvars", "/p/service-account-prod.json", "/p/.git/config", "/p/secrets.yaml",
+    "/p/terraform.tfstate", "/p/prod.tfvars", "/p/service-account-prod.json", "/p/.git/config", "/p/secrets.yaml", "/p/secrets", "/p/.secrets", "/p/credentials", "/p/credentials.yml", "/p/secrets.json",
   ]) {
     assert.equal(isSensitivePath(f), true, f);
   }
 });
 
 test("não marca arquivos comuns nem os modelos de .env", () => {
-  for (const f of ["/p/src/app.ts", "/p/README.md", "/p/.env.example", "/p/.env.sample", "/p/config.json", "/p/.gitignore", "/p/id_rsa.pub", "/p/keyboard.ts"]) {
+  for (const f of ["/p/src/app.ts", "/p/README.md", "/p/.env.example", "/p/.env.sample", "/p/config.json", "/p/.gitignore", "/p/id_rsa.pub", "/p/keyboard.ts", "/p/src/secrets.ts", "/p/src/credentials.service.ts", "/p/lib/secret.py", "/p/docs/secrets-management.md", "/p/SecretsManager.java"]) {
     assert.equal(isSensitivePath(f), false, f);
   }
 });
@@ -52,4 +52,19 @@ test("describeReadError separa os motivos", () => {
   assert.equal(describeReadError(new Error("The file is not displayed in the text editor because it is either binary or uses an unsupported text encoding.")).kind, "binary");
   assert.equal(describeReadError(new Error("File is too large")).kind, "toolarge");
   assert.equal(describeReadError(new Error("algo estranho")).kind, "other");
+});
+
+test("findHiddenChars: emoji com ZWJ e persa com ZWNJ não contam", () => {
+  assert.deepEqual(findHiddenChars("família 👨\u200d👩\u200d👧 ok"), []);
+  assert.deepEqual(findHiddenChars("pessoa 🧑🏽\u200d💻 programando, bandeira 🏳️\u200d🌈"), []);
+  assert.deepEqual(findHiddenChars("می\u200cخواهم"), []); // persa
+  assert.deepEqual(findHiddenChars("क्\u200cष"), []); // devanágari
+});
+
+test("findHiddenChars: ZWJ e ZWNJ fora de contexto, ZWSP e bidi ainda contam", () => {
+  assert.deepEqual(findHiddenChars("ab\u200dcd"), [{ kind: "invisível", line: 1 }]);
+  assert.deepEqual(findHiddenChars("ab\u200ccd"), [{ kind: "invisível", line: 1 }]);
+  assert.deepEqual(findHiddenChars("a\n\u200Bb"), [{ kind: "invisível", line: 2 }]);
+  assert.deepEqual(findHiddenChars("x\u2066y"), [{ kind: "bidi", line: 1 }]);
+  assert.deepEqual(findHiddenChars("😀\u200dabc"), [{ kind: "invisível", line: 1 }]);
 });
