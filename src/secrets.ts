@@ -13,9 +13,10 @@ interface Pattern {
 
 const PATTERNS: Pattern[] = [
   { type: "chave privada", regex: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g },
-  { type: "chave Anthropic", regex: /sk-ant-[A-Za-z0-9_-]{20,}/g },
-  { type: "chave OpenAI", regex: /sk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}/g },
-  { type: "chave xAI", regex: /xai-[A-Za-z0-9]{20,}/g },
+  { type: "chave Anthropic", regex: /(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}/g },
+  // Sem o (?<!...) um nome como "risk-assessment-framework-config" casaria com "sk-...".
+  { type: "chave OpenAI", regex: /(?<![A-Za-z0-9_-])sk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}/g },
+  { type: "chave xAI", regex: /(?<![A-Za-z0-9_-])xai-[A-Za-z0-9]{20,}/g },
   { type: "chave Google", regex: /AIza[0-9A-Za-z_-]{35}/g },
   { type: "chave AWS", regex: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
   { type: "token GitHub", regex: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g },
@@ -27,7 +28,9 @@ const PATTERNS: Pattern[] = [
     type: "valor secreto",
     // rótulo = valor, com valor de 12+ caracteres, com letra e dígito e sem parênteses
     // (para não confundir com chamadas de função)
-    regex: /\b((?:api[_-]?key|secret|token|passw(?:or)?d|senha)\s*[:=]\s*["']?)((?=[^\s"'()]*[A-Za-z])(?=[^\s"'()]*\d)[^\s"'()]{12,})/gi,
+    // O rótulo pode vir depois de um sublinhado ou hífen (DB_PASSWORD, access_token, client-secret),
+    // mas não no meio de uma palavra (mytoken). Aceita aspas entre o rótulo e o separador ("password": "...").
+    regex: /(?<![A-Za-z0-9])((?:api[_-]?key|secret|token|passw(?:or)?d|senha)["']?\s*[:=]\s*["']?)((?=[^\s"'()]*[A-Za-z])(?=[^\s"'()]*\d)[^\s"'()]{12,})/gi,
     labelled: true,
   },
 ];

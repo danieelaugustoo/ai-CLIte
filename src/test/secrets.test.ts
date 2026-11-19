@@ -86,3 +86,50 @@ test("StreamRedactor: texto sem segredo sai inteiro e na ordem", () => {
   const out = parts.map((p) => r.push(p)).join("") + r.flush();
   assert.equal(out, "Olá, mundo\nsegunda linha");
 });
+
+test("pega rótulos com prefixo (DB_PASSWORD, access_token...) e chaves de JSON", () => {
+  const v = "Abc123Def456Ghi789";
+  const cases = [
+    `MY_APP_SECRET=${v}`,
+    `access_token = "${v}"`,
+    `DB_PASSWORD=${v}`,
+    `client_secret: ${v}`,
+    `"password": "${v}"`,
+    `'api_key': '${v}'`,
+    `GITHUB-TOKEN=${v}`,
+  ];
+  for (const c of cases) {
+    const out = redact(c);
+    assert.ok(!out.includes(v), `vazou: ${out}`);
+    assert.ok(out.includes("[REDACTED:valor secreto]"), c);
+    assert.equal(findSecrets(c).length, 1, c);
+  }
+});
+
+test("o rótulo precisa ser uma palavra inteira ou ter prefixo com sublinhado", () => {
+  const v = "Abc123Def456Ghi789";
+  for (const ok of [`mytoken=${v}`, `tokenizer=${v}`, `secretary = ${v}`]) {
+    assert.equal(redact(ok), ok, ok);
+  }
+});
+
+test("nomes com hífen que contêm 'sk-' não são chaves", () => {
+  for (const ok of [
+    "risk-assessment-framework-config",
+    "task-runner-configuration-settings",
+    "disk-encryption-configuration-name",
+    "my-xai-integration-configuration-name",
+    "flask-sqlalchemy-configuration-helpers",
+  ]) {
+    assert.equal(redact(ok), ok, ok);
+    assert.deepEqual(findSecrets(ok), [], ok);
+  }
+});
+
+test("a chave de verdade ainda é pega depois de espaço, aspas, igual e dois-pontos", () => {
+  const key = "sk-" + "proj-" + "B".repeat(30);
+  for (const c of [`k ${key}`, `"${key}"`, `OPENAI_API_KEY=${key}`, `key:${key}`, `(${key})`]) {
+    assert.ok(redact(c).includes("[REDACTED:chave OpenAI]"), c);
+    assert.ok(!redact(c).includes("BBBBBBBB"), c);
+  }
+});
