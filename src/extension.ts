@@ -23,6 +23,7 @@ import { buildPrompt, buildFullPrompt } from "./prompt";
 import * as conversation from "./conversation";
 import * as cart from "./contextCart";
 import * as proposal from "./proposal";
+import { isValidModel } from "./validation";
 
 // ---------------------------------------------------------------------------
 // Estado do módulo
@@ -271,7 +272,14 @@ function buildArgs(): string[] {
   ];
 
   if (model) {
-    args.push("--model", model);
+    if (isValidModel(model)) {
+      args.push("--model", model);
+    } else {
+      // Nunca repassamos um valor estranho à CLI: no Windows ele passaria por um shell.
+      vscode.window.showWarningMessage(
+        "Claude CLI Lite: o nome do modelo tem caracteres não permitidos e foi ignorado. Corrija em claudeCliLite.model."
+      );
+    }
   }
 
   return [...args, ...extraArgs];

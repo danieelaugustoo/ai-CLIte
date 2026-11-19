@@ -142,7 +142,10 @@
         "claudeCliLite.model": {
           "type": "string",
           "default": "",
-          "description": "Modelo a usar (ex.: \"sonnet\", \"opus\"). Deixe vazio para usar o modelo por defeito da CLI."
+          "description": "Modelo a usar (ex.: \"sonnet\", \"opus\"). Deixe vazio para usar o modelo por defeito da CLI.",
+          "scope": "machine",
+          "pattern": "^[A-Za-z0-9._:/\\[\\]-]{0,100}$",
+          "patternErrorMessage": "Use só letras, números e . _ : / [ ] - (até 100 caracteres)."
         },
         "claudeCliLite.extraArgs": {
           "type": "array",
@@ -175,7 +178,8 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package"
+    "package": "vsce package",
+    "test": "npm run compile && node --test \"out/test/*.test.js\""
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -184,4 +188,3 @@
     "typescript": "^5.4.0"
   }
 }
-
