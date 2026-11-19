@@ -3,6 +3,15 @@
  * direto com `node --test`.
  */
 
+/**
+ * Lê um número de configuração. Qualquer coisa que não seja um número finito e
+ * maior ou igual a zero (um texto no settings.json, por exemplo) vira o padrão.
+ * Sem isso, `Math.max(0, "abc")` dá NaN e `setTimeout(NaN)` dispara em 1 ms.
+ */
+export function nonNegativeNumberOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
 /** Nome de modelo aceito: letras, dígitos e . _ : / [ ] -, de 1 a 100 caracteres. */
 const MODEL_PATTERN = /^[A-Za-z0-9._:/[\]-]{1,100}$/;
 

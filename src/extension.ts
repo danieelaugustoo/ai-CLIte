@@ -27,7 +27,7 @@ import { buildPrompt, buildFullPrompt } from "./prompt";
 import * as conversation from "./conversation";
 import * as cart from "./contextCart";
 import * as proposal from "./proposal";
-import { isValidModel } from "./validation";
+import { isValidModel, nonNegativeNumberOr } from "./validation";
 import { redact, StreamRedactor } from "./secrets";
 import { buildPreview } from "./preview";
 import { cancellableWait, Cancellable } from "./waiting";
@@ -312,41 +312,41 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
     return;
   }
 
-  if (Buffer.byteLength(prompt, "utf8") > MAX_INPUT_BYTES) {
-    run.cleanup();
-    vscode.window.showErrorMessage(
-      `Claude CLI Lite: o texto a enviar passa de ${Math.round(MAX_INPUT_BYTES / (1024 * 1024))} MB, que é o limite. Tire arquivos do contexto ou reduza a seleção.`
-    );
-    return;
-  }
-
-  // Prévia do que vai ser enviado: no primeiro uso, e sempre que `alwaysPreview` estiver ligado.
-  const alwaysPreview = vscode.workspace.getConfiguration("claudeCliLite").get<boolean>("alwaysPreview", false);
-  if (alwaysPreview || !extContext.globalState.get<boolean>("previewShown.claude", false)) {
-    const previewText = buildPreview({
-      engine: "Claude Code CLI",
-      model: vscode.workspace.getConfiguration("claudeCliLite").get<string>("model", "").trim(),
-      cwdMode: run.mode,
-      workspaceTrusted: vscode.workspace.isTrusted,
-      args: buildArgs(true),
-      prompt,
-      files: cartNow.files.map((f) => ({ path: f.path, chars: f.content.length })),
-      historyTurns: turns.length,
-      historyChars,
-      selectionChars: selectedText.length,
-      notes: [...cartNow.notes, ...run.notes],
-      envNames: buildChildEnv(process.env, vscode.workspace.getConfiguration("claudeCliLite").get<string[]>("extraEnvNames", [])).names,
-    });
-    const approved = await confirmPreview(previewText);
-    if (!approved) {
-      run.cleanup();
-      return;
-    }
-    await extContext.globalState.update("previewShown.claude", true);
-  }
-
+  // Tudo daqui até o fim do pedido fica dentro do try: a pasta temporária é apagada em qualquer
+  // saída, inclusive se a prévia falhar ao abrir.
   let result: RunResult;
   try {
+    if (Buffer.byteLength(prompt, "utf8") > MAX_INPUT_BYTES) {
+      vscode.window.showErrorMessage(
+        `Claude CLI Lite: o texto a enviar passa de ${Math.round(MAX_INPUT_BYTES / (1024 * 1024))} MB, que é o limite. Tire arquivos do contexto ou reduza a seleção.`
+      );
+      return;
+    }
+
+    // Prévia do que vai ser enviado: no primeiro uso, e sempre que `alwaysPreview` estiver ligado.
+    const alwaysPreview = vscode.workspace.getConfiguration("claudeCliLite").get<boolean>("alwaysPreview", false);
+    if (alwaysPreview || !extContext.globalState.get<boolean>("previewShown.claude", false)) {
+      const previewText = buildPreview({
+        engine: "Claude Code CLI",
+        model: vscode.workspace.getConfiguration("claudeCliLite").get<string>("model", "").trim(),
+        cwdMode: run.mode,
+        workspaceTrusted: vscode.workspace.isTrusted,
+        args: buildArgs(true),
+        prompt,
+        files: cartNow.files.map((f) => ({ path: f.path, chars: f.content.length })),
+        historyTurns: turns.length,
+        historyChars,
+        selectionChars: selectedText.length,
+        notes: [...cartNow.notes, ...run.notes],
+        envNames: buildChildEnv(process.env, vscode.workspace.getConfiguration("claudeCliLite").get<string[]>("extraEnvNames", [])).names,
+      });
+      const approved = await confirmPreview(previewText);
+      if (!approved) {
+        return;
+      }
+      await extContext.globalState.update("previewShown.claude", true);
+    }
+
     result = await runClaude(prompt, run.cwd, [...cartNow.notes, ...run.notes, summaryLine]);
   } finally {
     run.cleanup();
@@ -582,8 +582,8 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
   const cliPath = config.get<string>("cliPath", "claude").trim() || "claude";
   const args = buildArgs();
   const childEnv = buildChildEnv(process.env, config.get<string[]>("extraEnvNames", []));
-  const idleMs = Math.max(0, config.get<number>("timeoutIdleSeconds", 180)) * 1000;
-  const totalMs = Math.max(0, config.get<number>("timeoutTotalSeconds", 1200)) * 1000;
+  const idleMs = nonNegativeNumberOr(config.get<unknown>("timeoutIdleSeconds", 180), 180) * 1000;
+  const totalMs = nonNegativeNumberOr(config.get<unknown>("timeoutTotalSeconds", 1200), 1200) * 1000;
 
   // Este pedido tem estado próprio. Nada aqui é global, e `activeRequest` só é apagado no `close`.
   const request: ActiveRequest = { cancelled: false };
