@@ -3,6 +3,7 @@
   "displayName": "Claude CLI Lite",
   "description": "Ponte leve entre o editor e a instalação global do Claude Code (CLI) — sem contexto fantasma, sem chaves de API, sem SDKs de IA embutidos.",
   "version": "0.2.3",
+  "license": "Apache-2.0",
   "publisher": "local",
   "engines": {
     "vscode": "^1.74.0"
