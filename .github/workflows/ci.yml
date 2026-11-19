@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "fase-0/**"]
+  pull_request:
+
+# O token do workflow só lê o repositório.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Testes (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      # As actions ficam fixadas pelo hash do commit (a versão está no comentário).
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Conferir o conteúdo do pacote
+        run: npm run check:package

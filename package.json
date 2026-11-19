@@ -192,7 +192,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "package": "vsce package",
-    "test": "npm run compile && node --test \"out/test/*.test.js\""
+    "test": "npm run compile && node --test \"out/test/*.test.js\"",
+    "check:package": "npm run compile && node scripts/check-package.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
