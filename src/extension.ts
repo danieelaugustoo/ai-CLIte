@@ -203,6 +203,9 @@ async function ask(mode: "new" | "continue"): Promise<void> {
   if (!(await cart.confirmSize(cartNow.files))) {
     return;
   }
+  if (!(await cart.confirmFindings(cartNow.files, selectedText))) {
+    return;
+  }
 
   const prompt = buildFullPrompt({ files: cartNow.files, turns, request, hasTarget: target !== undefined });
 
