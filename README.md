@@ -62,6 +62,8 @@ npm run package
 | `claudeCliLite.extraArgs` | `[]` | Argumentos extras acrescentados no fim da chamada. Ignorados em workspace não confiável |
 | `claudeCliLite.includeGitContext` | `false` | Se ligado, a CLI roda na pasta do projeto, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Escopo de máquina |
 | `claudeCliLite.alwaysPreview` | `false` | Mostra a prévia do que vai ser enviado antes de todo pedido. Por padrão ela aparece só no primeiro uso. Escopo de máquina |
+| `claudeCliLite.timeoutIdleSeconds` | `180` | Encerra o pedido se a CLI ficar esse tempo sem enviar nada. `0` desliga. Escopo de máquina |
+| `claudeCliLite.timeoutTotalSeconds` | `1200` | Encerra o pedido se ele passar desse tempo total. `0` desliga. Escopo de máquina |
 | `claudeCliLite.historyMaxTurns` | `3` | Máximo de pares pergunta/resposta guardados |
 | `claudeCliLite.historyMaxChars` | `20000` | Limite de caracteres do histórico. Os turnos mais antigos saem primeiro |
 | `claudeCliLite.contextMaxChars` | `60000` | Acima desse total nos arquivos do contexto, a extensão pede confirmação antes de enviar |
@@ -79,7 +81,7 @@ Se a CLI não for encontrada, a extensão mostra um aviso com um botão que leva
 - **Windows: em revisão de segurança.** O uso de `shell: true` no Windows ainda precisa de correção, e a extensão ainda não foi verificada lá. Por enquanto, use Linux ou macOS.
 - **Prévia do que vai ser enviado.** No primeiro uso (e sempre, com `alwaysPreview` ligado) a extensão abre ao lado um texto somente leitura com o modelo, a pasta de execução, os argumentos, cada arquivo do contexto e o texto exato que vai pelo `stdin`. Você escolhe Enviar ou Cancelar; ignorar o aviso conta como cancelar.
 - **Segredos e caracteres ocultos.** Arquivos com cara de sensíveis (`.env`, chaves, `id_rsa`...) e arquivos de fora do workspace pedem confirmação para entrar no contexto. Antes de enviar, o contexto e a seleção passam por um scanner de chaves conhecidas e de caracteres bidi e invisíveis. Só o tipo e a linha aparecem, nunca o valor. O canal de saída e as notificações redigem chaves em claro.
-- **Um pedido por vez.**
+- **Um pedido por vez, do começo ao fim.** O pedido só deixa de estar em curso quando o processo realmente termina; cancelar encerra o processo e os filhos dele (SIGINT, depois SIGTERM e SIGKILL), e a saída de um pedido cancelado é descartada. Há limites de tempo (parado e total), de tamanho do texto enviado (9 MB), de uma linha de saída e da resposta.
 
 ## Estrutura
 

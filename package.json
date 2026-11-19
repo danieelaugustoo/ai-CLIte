@@ -175,6 +175,20 @@
           "default": false,
           "description": "Se ligado, mostra a prévia do que vai ser enviado antes de TODO pedido. Por padrão ela aparece só no primeiro uso."
         },
+        "claudeCliLite.timeoutIdleSeconds": {
+          "type": "number",
+          "scope": "machine",
+          "default": 180,
+          "minimum": 0,
+          "description": "Encerra o pedido se a CLI ficar este tempo (em segundos) sem enviar nada. 0 desliga."
+        },
+        "claudeCliLite.timeoutTotalSeconds": {
+          "type": "number",
+          "scope": "machine",
+          "default": 1200,
+          "minimum": 0,
+          "description": "Encerra o pedido se ele passar deste tempo total (em segundos). 0 desliga."
+        },
         "claudeCliLite.historyMaxTurns": {
           "type": "number",
           "default": 3,

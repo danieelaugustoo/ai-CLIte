@@ -19,8 +19,9 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
-import { ChildProcessWithoutNullStreams, execFile } from "child_process";
+import { ChildProcessWithoutNullStreams } from "child_process";
 import { launchCli } from "./launcher";
+import { LineSplitter, MAX_INPUT_BYTES, MAX_OUTPUT_CHARS, MAX_STDOUT_LINE_CHARS, terminateTree, Watchdog, TimeoutKind } from "./lifecycle";
 import { isPlatformBlocked, PLATFORM_BLOCKED_MESSAGE } from "./platform";
 import { buildPrompt, buildFullPrompt } from "./prompt";
 import * as conversation from "./conversation";
@@ -37,11 +38,18 @@ import { buildPreview } from "./preview";
 /** Canal de output onde a resposta da CLI é escrita em streaming. */
 let outputChannel: vscode.OutputChannel;
 
-/** Processo atualmente em execução (só um pedido de cada vez). */
-let currentProcess: ChildProcessWithoutNullStreams | undefined;
+/**
+ * Pedido em andamento (só um de cada vez). Existe do início do pedido até o `close`
+ * real do processo: cancelar NÃO o apaga, só marca `cancelled` e encerra o processo.
+ */
+interface ActiveRequest {
+  child?: ChildProcessWithoutNullStreams;
+  cancelled: boolean;
+}
+let activeRequest: ActiveRequest | undefined;
 
-/** Marca que o pedido em curso foi cancelado (comando ou botão da notificação). */
-let cancelRequested = false;
+/** Verdadeiro desde o início de `ask()` (caixa de pergunta, prévia e confirmações incluídas). */
+let askInFlight = false;
 
 /** Barra de estado: nº de turnos na memória e de ficheiros no carrinho. */
 let statusBar: vscode.StatusBarItem;
@@ -131,9 +139,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // Não deixar processos órfãos quando a extensão é desativada / o editor fecha.
-  if (currentProcess) {
-    killTree(currentProcess);
-    currentProcess = undefined;
+  if (activeRequest?.child) {
+    activeRequest.cancelled = true;
+    terminateTree(activeRequest.child);
   }
 }
 
@@ -153,6 +161,22 @@ function formatChars(n: number): string {
  * O histórico e a proposta de diff só são atualizados se o pedido tiver sucesso.
  */
 async function ask(mode: "new" | "continue"): Promise<void> {
+  // Ocupado desde o começo até o fim de verdade, não só quando o processo existe.
+  if (askInFlight || activeRequest) {
+    vscode.window.showWarningMessage(
+      "Claude CLI Lite: já há um pedido em curso. Cancela-o (Claude: Cancelar pedido) antes de iniciar outro."
+    );
+    return;
+  }
+  askInFlight = true;
+  try {
+    await runAsk(mode);
+  } finally {
+    askInFlight = false;
+  }
+}
+
+async function runAsk(mode: "new" | "continue"): Promise<void> {
   // Windows bloqueado no preview até a verificação em máquina real (S19).
   if (isPlatformBlocked(process.platform)) {
     vscode.window.showErrorMessage(PLATFORM_BLOCKED_MESSAGE);
@@ -175,13 +199,6 @@ async function ask(mode: "new" | "continue"): Promise<void> {
     }
   } else if (!hasSelection && conversation.getTurns().length === 0) {
     vscode.window.showWarningMessage("Claude CLI Lite: não há conversa; usa \"Nova pergunta sobre seleção\".");
-    return;
-  }
-
-  if (currentProcess) {
-    vscode.window.showWarningMessage(
-      "Claude CLI Lite: já há um pedido em curso. Cancela-o (Claude: Cancelar pedido) antes de iniciar outro."
-    );
     return;
   }
 
@@ -254,6 +271,14 @@ async function ask(mode: "new" | "continue"): Promise<void> {
     return;
   }
 
+  if (Buffer.byteLength(prompt, "utf8") > MAX_INPUT_BYTES) {
+    run.cleanup();
+    vscode.window.showErrorMessage(
+      `Claude CLI Lite: o texto a enviar passa de ${Math.round(MAX_INPUT_BYTES / (1024 * 1024))} MB, que é o limite. Tire arquivos do contexto ou reduza a seleção.`
+    );
+    return;
+  }
+
   // Prévia do que vai ser enviado: no primeiro uso, e sempre que `alwaysPreview` estiver ligado.
   const alwaysPreview = vscode.workspace.getConfiguration("claudeCliLite").get<boolean>("alwaysPreview", false);
   if (alwaysPreview || !extContext.globalState.get<boolean>("previewShown.claude", false)) {
@@ -303,15 +328,17 @@ function clearConversation(): void {
 }
 
 function cancelCurrent(): void {
-  if (!currentProcess) {
+  if (!activeRequest) {
     vscode.window.showInformationMessage("Claude CLI Lite: não há nenhum pedido em curso.");
     return;
   }
-  cancelRequested = true;
+  activeRequest.cancelled = true;
   // A mensagem "[cancelado pelo utilizador]" é escrita no `close` do processo (runClaude),
-  // para aparecer também quando se cancela pelo botão da notificação.
-  killTree(currentProcess);
-  currentProcess = undefined;
+  // para aparecer também quando se cancela pelo botão da notificação. O pedido só deixa
+  // de estar "em curso" quando o processo realmente terminar.
+  if (activeRequest.child) {
+    terminateTree(activeRequest.child);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -482,8 +509,13 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
   const config = vscode.workspace.getConfiguration("claudeCliLite");
   const cliPath = config.get<string>("cliPath", "claude").trim() || "claude";
   const args = buildArgs();
+  const idleMs = Math.max(0, config.get<number>("timeoutIdleSeconds", 180)) * 1000;
+  const totalMs = Math.max(0, config.get<number>("timeoutTotalSeconds", 1200)) * 1000;
 
-  cancelRequested = false;
+  // Este pedido tem estado próprio. Nada aqui é global, e `activeRequest` só é apagado no `close`.
+  const request: ActiveRequest = { cancelled: false };
+  activeRequest = request;
+
   outputChannel.clear();
   outputChannel.show(true);
   for (const line of headerLines) {
@@ -502,6 +534,13 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
       progress.report({ message: "a perguntar ao Claude…" });
 
       return new Promise<RunResult>((resolve) => {
+        const finish = (result: RunResult): void => {
+          if (activeRequest === request) {
+            activeRequest = undefined;
+          }
+          resolve(result);
+        };
+
         // Nunca usamos shell. O executável é resolvido e validado em `launcher.ts`
         // (no Windows, o shim .cmd do npm vai pelo cmd.exe com argumentos permitidos).
         let child: ChildProcessWithoutNullStreams;
@@ -509,48 +548,70 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
           child = launchCli(cliPath, args, { cwd, env: { ...process.env, NO_COLOR: "1" } });
         } catch (err: any) {
           reportSpawnFailure(err, cliPath);
-          resolve({ ok: false, text: "" });
+          finish({ ok: false, text: "" });
           return;
         }
-
-        currentProcess = child;
+        request.child = child;
 
         cancellationToken.onCancellationRequested(() => {
-          cancelRequested = true;
-          if (currentProcess === child) {
-            killTree(child);
-            currentProcess = undefined;
-          }
+          request.cancelled = true;
+          terminateTree(child);
         });
 
-        let stdoutBuffer = "";
-        let stderrBuffer = "";
+        const splitter = new LineSplitter(MAX_STDOUT_LINE_CHARS);
         const state: StreamState = { receivedAnyDelta: false, text: "", isError: false, redactor: new StreamRedactor() };
         let spawnFailed = false;
-        let abortedForSafety = false;
+        let timeoutKind: TimeoutKind | undefined;
+        let outputExceeded = false;
+        let lineOverflow = false;
+        let terminating = false;
+        const stopForReason = (): void => {
+          if (!terminating) {
+            terminating = true;
+            terminateTree(child);
+          }
+        };
+
+        // Sem sinal de vida por muito tempo, ou tempo total demais: encerra.
+        const watchdog = new Watchdog(idleMs, totalMs, (kind) => {
+          timeoutKind = kind;
+          stopForReason();
+        });
 
         child.stdout.setEncoding("utf8"); // evita cortar caracteres multi-byte entre chunks
         child.stderr.setEncoding("utf8");
 
         child.stdout.on("data", (chunk: string) => {
-          stdoutBuffer += chunk;
-          let newlineIndex: number;
-          while ((newlineIndex = stdoutBuffer.indexOf("\n")) !== -1) {
-            const line = stdoutBuffer.slice(0, newlineIndex);
-            stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
-            if (line.trim().length > 0) {
-              handleStreamLine(line, state);
-              if (state.initViolation && !abortedForSafety) {
-                abortedForSafety = true;
-                killTree(child);
-              }
+          watchdog.touch();
+          const { lines, overflow } = splitter.push(chunk);
+          lineOverflow = lineOverflow || overflow;
+          // Depois de cancelar (ou de decidir encerrar) a saída é descartada.
+          if (request.cancelled || terminating) {
+            return;
+          }
+          for (const line of lines) {
+            if (line.trim().length === 0) {
+              continue;
+            }
+            handleStreamLine(line, state);
+            if (state.initViolation || state.text.length > MAX_OUTPUT_CHARS) {
+              outputExceeded = outputExceeded || state.text.length > MAX_OUTPUT_CHARS;
+              stopForReason();
+              break;
             }
           }
         });
 
         child.stderr.on("data", (chunk: string) => {
-          stderrBuffer += chunk;
-          logAppend(`[stderr] ${chunk}`);
+          watchdog.touch();
+          if (!request.cancelled && !terminating) {
+            logAppend(`[stderr] ${chunk}`);
+          }
+        });
+
+        // Se a CLI sair antes de ler tudo, o `write` dá EPIPE. O `close` já trata o resultado.
+        child.stdin.on("error", () => {
+          /* ignorado de propósito */
         });
 
         child.on("error", (err: NodeJS.ErrnoException) => {
@@ -559,18 +620,16 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
         });
 
         child.on("close", (code) => {
-          if (currentProcess === child) {
-            currentProcess = undefined;
-          }
+          watchdog.stop();
           if (spawnFailed) {
-            resolve({ ok: false, text: "" });
+            finish({ ok: false, text: "" });
             return;
           }
 
           // Processa qualquer resto sem newline final.
-          if (stdoutBuffer.trim().length > 0) {
-            handleStreamLine(stdoutBuffer, state);
-            stdoutBuffer = "";
+          const rest = splitter.flush();
+          if (rest.trim().length > 0 && !request.cancelled && !terminating) {
+            handleStreamLine(rest, state);
           }
           logRaw(state.redactor.flush());
 
@@ -579,15 +638,34 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
             vscode.window.showErrorMessage(
               `Claude CLI Lite: pedido abortado por segurança (${state.initViolation}). Veja o canal "Claude CLI Lite".`
             );
-            resolve({ ok: false, text: "" });
+            finish({ ok: false, text: "" });
             return;
           }
 
           // Cancelado pelo comando ou pelo botão da notificação: não é um erro.
-          if (cancelRequested || cancellationToken.isCancellationRequested) {
+          if (request.cancelled || cancellationToken.isCancellationRequested) {
             logLine("\n\n[cancelado pelo utilizador]");
-            resolve({ ok: false, text: state.text });
+            finish({ ok: false, text: state.text });
             return;
+          }
+
+          if (timeoutKind) {
+            const motivo = timeoutKind === "idle" ? "sem nenhuma resposta por tempo demais" : "passou do tempo total permitido";
+            logLine(`\n\n[pedido encerrado: ${motivo}]`);
+            vscode.window.showErrorMessage(`Claude CLI Lite: pedido encerrado (${motivo}). Os limites estão em timeoutIdleSeconds e timeoutTotalSeconds.`);
+            finish({ ok: false, text: "" });
+            return;
+          }
+
+          if (outputExceeded) {
+            logLine("\n\n[resposta cortada: passou do limite de tamanho]");
+            vscode.window.showErrorMessage("Claude CLI Lite: a resposta passou do limite de tamanho e foi descartada.");
+            finish({ ok: false, text: "" });
+            return;
+          }
+
+          if (lineOverflow) {
+            logLine("\n[aviso] uma linha de saída da CLI era grande demais e foi descartada.");
           }
 
           if (code !== 0) {
@@ -597,7 +675,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
             );
           }
 
-          resolve({ ok: code === 0 && !state.isError, text: state.text });
+          finish({ ok: code === 0 && !state.isError, text: state.text });
         });
 
         // O prompt vai inteiramente pelo stdin — nunca como argumento — para
@@ -711,32 +789,6 @@ function reportSpawnFailure(err: NodeJS.ErrnoException | any, cliPath: string): 
 
   logLine(`\n[erro] ${err?.message ?? String(err)}`);
   vscode.window.showErrorMessage(`Claude CLI Lite: erro ao executar a CLI — ${redact(err?.message ?? String(err))}`);
-}
-
-// ---------------------------------------------------------------------------
-// Cancelamento: matar a árvore de processos
-// ---------------------------------------------------------------------------
-
-/**
- * `child.kill()` só mata o processo direto. No Windows, quando o shim .cmd roda
- * pelo cmd.exe, isso é o `cmd.exe`, deixando o `claude`/`node` filho a correr. Por
- * isso, no Windows usamos `taskkill /T` para matar toda a árvore.
- */
-function killTree(child: ChildProcessWithoutNullStreams): void {
-  if (child.pid === undefined) {
-    return;
-  }
-
-  if (process.platform === "win32") {
-    // Sem shell: taskkill por caminho absoluto e argumentos em lista.
-    const systemRoot = process.env.SystemRoot || "C:\\Windows";
-    const taskkill = path.win32.join(systemRoot, "System32", "taskkill.exe");
-    execFile(taskkill, ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => {
-      /* ignora erros — o processo pode já ter terminado */
-    });
-  } else {
-    child.kill();
-  }
 }
 
 /** Formatação simples só para o log do comando executado no OutputChannel. */

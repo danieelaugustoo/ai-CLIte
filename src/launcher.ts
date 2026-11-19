@@ -54,5 +54,8 @@ export function launchCli(cliPath: string, args: string[], options: LaunchOption
     env: options.env,
     shell: false,
     windowsHide: true,
+    // Fora do Windows o processo vira líder de um grupo, para podermos encerrar
+    // ele e os filhos dele de uma vez (ver lifecycle.ts).
+    detached: platform !== "win32",
   });
 }
