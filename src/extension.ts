@@ -30,6 +30,7 @@ import * as proposal from "./proposal";
 import { isValidModel } from "./validation";
 import { redact, StreamRedactor } from "./secrets";
 import { buildPreview } from "./preview";
+import { cancellableWait, Cancellable } from "./waiting";
 import { buildTypedArgs, validateExtraArgs } from "./args";
 import { buildChildEnv } from "./env";
 
@@ -70,20 +71,39 @@ class PreviewProvider implements vscode.TextDocumentContentProvider {
   }
 }
 
-/** Abre a prévia ao lado e pergunta se pode enviar. Fechar ou ignorar o aviso conta como cancelar. */
+/** Tempo máximo que a prévia espera uma resposta antes de contar como cancelada. */
+const PREVIEW_TIMEOUT_MS = 2 * 60 * 1000;
+
+/** Espera pela confirmação da prévia, quando houver uma, para o comando Cancelar poder encerrá-la. */
+let pendingPreview: Cancellable<string | undefined> | undefined;
+
+/**
+ * Abre a prévia ao lado e pergunta se pode enviar. Fechar o aviso, esperar mais de
+ * 2 minutos ou rodar "Cancelar pedido" contam como cancelar. O aviso não é modal de
+ * propósito (o usuário precisa ler a prévia ao lado), por isso ele pode ficar sem
+ * resposta, e a extensão não pode ficar "ocupada" para sempre por causa disso.
+ */
 async function confirmPreview(text: string): Promise<boolean> {
   const id = `/previa-${++previewCounter}.txt`;
   previewContents.set(id, text);
   try {
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: id }));
     await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
-    const choice = await vscode.window.showInformationMessage(
-      "Claude CLI Lite: revise o que vai ser enviado (aberto ao lado). Enviar?",
-      "Enviar",
-      "Cancelar"
+    pendingPreview = cancellableWait(
+      Promise.resolve(
+        vscode.window.showInformationMessage(
+          "Claude CLI Lite: revise o que vai ser enviado (aberto ao lado). Enviar?",
+          "Enviar",
+          "Cancelar"
+        )
+      ),
+      PREVIEW_TIMEOUT_MS
     );
+    const choice = await pendingPreview.promise;
     return choice === "Enviar";
   } finally {
+    pendingPreview?.cancel(); // limpa o timer
+    pendingPreview = undefined;
     previewContents.delete(id);
   }
 }
@@ -174,7 +194,9 @@ async function ask(mode: "new" | "continue"): Promise<void> {
   // Ocupado desde o começo até o fim de verdade, não só quando o processo existe.
   if (askInFlight || activeRequest) {
     vscode.window.showWarningMessage(
-      "Claude CLI Lite: já há um pedido em curso. Cancela-o (Claude: Cancelar pedido) antes de iniciar outro."
+      pendingPreview
+        ? "Claude CLI Lite: há uma prévia aguardando a sua resposta (aberta ao lado). Responda Enviar ou Cancelar, ou rode Claude: Cancelar pedido."
+        : "Claude CLI Lite: já há um pedido em curso. Cancela-o (Claude: Cancelar pedido) antes de iniciar outro."
     );
     return;
   }
@@ -348,6 +370,11 @@ function clearConversation(): void {
 }
 
 function cancelCurrent(): void {
+  // Prévia aguardando confirmação: cancelar encerra a espera e o pedido nem começa.
+  if (pendingPreview) {
+    pendingPreview.cancel();
+    return;
+  }
   if (!activeRequest) {
     vscode.window.showInformationMessage("Claude CLI Lite: não há nenhum pedido em curso.");
     return;
