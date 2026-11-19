@@ -6,6 +6,7 @@
  * Cada secção só aparece se tiver conteúdo.
  */
 
+import { randomBytes } from "crypto";
 import type { CartFile } from "./contextCart";
 import type { Turn } from "./conversation";
 
@@ -66,32 +67,63 @@ export interface FullPromptInput {
   request: string;
   /** Há um alvo (seleção atual ou da conversa) onde um diff poderá ser aplicado? */
   hasTarget: boolean;
+  /** Sufixo dos delimitadores. Só para testes: em uso normal é sorteado a cada pedido. */
+  nonce?: string;
 }
 
 /** Instrução final que torna o diff fiável: o trecho devolvido completo, num único bloco. */
 const PROPOSAL_RULE =
   "Se propuseres alterações ao código selecionado, devolve a versão completa desse trecho num único bloco de código.";
 
+/**
+ * Sorteia um sufixo para os delimitadores que não apareça em nenhum dos textos.
+ * Assim um arquivo ou uma resposta antiga com `</contexto>` ou `</pedido>` não
+ * consegue fechar uma seção e fingir ser outra (S12).
+ */
+export function newNonce(texts: string[]): string {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const nonce = randomBytes(6).toString("hex");
+    if (!texts.some((t) => t.includes(nonce))) {
+      return nonce;
+    }
+  }
+  throw new Error("não foi possível gerar um delimitador único para o prompt");
+}
+
+/** Escapa um valor para ir dentro de um atributo entre aspas. */
+function escapeAttribute(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export function buildFullPrompt(input: FullPromptInput): string {
+  const nonce =
+    input.nonce ??
+    newNonce([
+      input.request,
+      ...input.files.flatMap((f) => [f.path, f.content]),
+      ...input.turns.flatMap((t) => [t.request, t.response]),
+    ]);
+  const tag = (name: string): string => `${name}_${nonce}`;
   const sections: string[] = [];
 
   if (input.files.length > 0) {
     const blocks = input.files.map((f) => {
       const fence = fenceFor(f.content);
-      const attr = f.path.replace(/"/g, "&quot;");
-      return `<ficheiro caminho="${attr}">\n${fence}${f.lang}\n${f.content}\n${fence}\n</ficheiro>`;
+      const attr = escapeAttribute(f.path);
+      return `<${tag("ficheiro")} caminho="${attr}">\n${fence}${f.lang}\n${f.content}\n${fence}\n</${tag("ficheiro")}>`;
     });
-    sections.push(`<contexto>\n${blocks.join("\n")}\n</contexto>`);
+    sections.push(`<${tag("contexto")}>\n${blocks.join("\n")}\n</${tag("contexto")}>`);
   }
 
   if (input.turns.length > 0) {
     const blocks = input.turns.map(
-      (t) => `<turno>\n<pergunta>${t.request}</pergunta>\n<resposta>${t.response}</resposta>\n</turno>`
+      (t) =>
+        `<${tag("turno")}>\n<${tag("pergunta")}>${t.request}</${tag("pergunta")}>\n<${tag("resposta")}>${t.response}</${tag("resposta")}>\n</${tag("turno")}>`
     );
-    sections.push(`<historico>\n${blocks.join("\n")}\n</historico>`);
+    sections.push(`<${tag("historico")}>\n${blocks.join("\n")}\n</${tag("historico")}>`);
   }
 
-  sections.push(`<pedido>\n${input.request}\n</pedido>`);
+  sections.push(`<${tag("pedido")}>\n${input.request}\n</${tag("pedido")}>`);
 
   if (input.hasTarget) {
     sections.push(PROPOSAL_RULE);
