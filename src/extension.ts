@@ -19,7 +19,9 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
-import { spawn, ChildProcessWithoutNullStreams, exec } from "child_process";
+import { ChildProcessWithoutNullStreams, execFile } from "child_process";
+import { launchCli } from "./launcher";
+import { isPlatformBlocked, PLATFORM_BLOCKED_MESSAGE } from "./platform";
 import { buildPrompt, buildFullPrompt } from "./prompt";
 import * as conversation from "./conversation";
 import * as cart from "./contextCart";
@@ -101,6 +103,12 @@ function formatChars(n: number): string {
  * O histórico e a proposta de diff só são atualizados se o pedido tiver sucesso.
  */
 async function ask(mode: "new" | "continue"): Promise<void> {
+  // Windows bloqueado no preview até a verificação em máquina real (S19).
+  if (isPlatformBlocked(process.platform)) {
+    vscode.window.showErrorMessage(PLATFORM_BLOCKED_MESSAGE);
+    return;
+  }
+
   const editor = vscode.window.activeTextEditor;
   const selection = editor?.selection;
   const selectedText = editor && selection ? editor.document.getText(selection) : "";
@@ -294,7 +302,7 @@ function buildArgs(): string[] {
     if (isValidModel(model)) {
       args.push("--model", model);
     } else {
-      // Nunca repassamos um valor estranho à CLI: no Windows ele passaria por um shell.
+      // Nunca repassamos um valor estranho à CLI.
       vscode.window.showWarningMessage(
         "Claude CLI Lite: o nome do modelo tem caracteres não permitidos e foi ignorado. Corrija em claudeCliLite.model."
       );
@@ -412,19 +420,11 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
       progress.report({ message: "a perguntar ao Claude…" });
 
       return new Promise<RunResult>((resolve) => {
-        // No Windows o binário instalado pelo npm é um shim `.cmd`. Desde as
-        // versões recentes do Node, invocar um `.cmd` sem `shell: true`
-        // lança EINVAL — por isso usamos shell apenas em win32.
-        const useShell = process.platform === "win32";
-
+        // Nunca usamos shell. O executável é resolvido e validado em `launcher.ts`
+        // (no Windows, o shim .cmd do npm vai pelo cmd.exe com argumentos permitidos).
         let child: ChildProcessWithoutNullStreams;
         try {
-          child = spawn(cliPath, args, {
-            cwd,
-            shell: useShell,
-            windowsHide: true, // evita que o cmd.exe (shell:true) abra uma janela de consola
-            env: { ...process.env, NO_COLOR: "1" },
-          });
+          child = launchCli(cliPath, args, { cwd, env: { ...process.env, NO_COLOR: "1" } });
         } catch (err: any) {
           reportSpawnFailure(err, cliPath);
           resolve({ ok: false, text: "" });
@@ -632,9 +632,9 @@ function reportSpawnFailure(err: NodeJS.ErrnoException | any, cliPath: string): 
 // ---------------------------------------------------------------------------
 
 /**
- * `child.kill()` só mata o processo direto — no Windows, com shell:true,
- * isso é o `cmd.exe`, deixando o `claude`/`node` filho a correr. Por isso,
- * no Windows usamos `taskkill /T` para matar toda a árvore.
+ * `child.kill()` só mata o processo direto. No Windows, quando o shim .cmd roda
+ * pelo cmd.exe, isso é o `cmd.exe`, deixando o `claude`/`node` filho a correr. Por
+ * isso, no Windows usamos `taskkill /T` para matar toda a árvore.
  */
 function killTree(child: ChildProcessWithoutNullStreams): void {
   if (child.pid === undefined) {
@@ -642,7 +642,10 @@ function killTree(child: ChildProcessWithoutNullStreams): void {
   }
 
   if (process.platform === "win32") {
-    exec(`taskkill /pid ${child.pid} /T /F`, { windowsHide: true }, () => {
+    // Sem shell: taskkill por caminho absoluto e argumentos em lista.
+    const systemRoot = process.env.SystemRoot || "C:\\Windows";
+    const taskkill = path.win32.join(systemRoot, "System32", "taskkill.exe");
+    execFile(taskkill, ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => {
       /* ignora erros — o processo pode já ter terminado */
     });
   } else {
