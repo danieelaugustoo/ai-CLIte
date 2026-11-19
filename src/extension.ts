@@ -301,7 +301,8 @@ function buildArgs(): string[] {
     }
   }
 
-  return [...args, ...extraArgs];
+  // Em workspace não confiável nenhum argumento extra passa, nem os do usuário: modo estrito.
+  return [...args, ...(vscode.workspace.isTrusted ? extraArgs : [])];
 }
 
 /** Pasta onde a CLI roda neste pedido, com o aviso para o canal e a limpeza. */
@@ -332,7 +333,7 @@ function prepareRunDir(uri: vscode.Uri | undefined): RunDir {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-cli-lite-"));
   return {
     cwd: dir,
-    notes: [],
+    notes: vscode.workspace.isTrusted ? [] : ["[workspace não confiável] modo estrito: extraArgs ignorados e CLI numa pasta temporária vazia."],
     cleanup: () => {
       try {
         fs.rmSync(dir, { recursive: true, force: true });

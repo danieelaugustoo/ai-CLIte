@@ -15,8 +15,15 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Ações de terminal ficam desativadas em workspaces não confiáveis."
-    }
+      "description": "Em workspace não confiável a extensão roda em modo estrito: a CLI usa uma pasta temporária vazia e os argumentos extras são ignorados.",
+      "restrictedConfigurations": [
+        "claudeCliLite.cliPath",
+        "claudeCliLite.extraArgs",
+        "claudeCliLite.model",
+        "claudeCliLite.includeGitContext"
+      ]
+    },
+    "virtualWorkspaces": false
   },
   "contributes": {
     "commands": [
