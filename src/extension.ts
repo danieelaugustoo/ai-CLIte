@@ -18,6 +18,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as os from "os";
+import * as fs from "fs";
 import { spawn, ChildProcessWithoutNullStreams, exec } from "child_process";
 import { buildPrompt, buildFullPrompt } from "./prompt";
 import * as conversation from "./conversation";
@@ -181,9 +182,23 @@ async function ask(mode: "new" | "continue"): Promise<void> {
   }
 
   const prompt = buildFullPrompt({ files: cartNow.files, turns, request, hasTarget: target !== undefined });
-  const cwd = cwdUri ? resolveCwd(cwdUri) : os.homedir();
 
-  const result = await runClaude(prompt, cwd, [...cartNow.notes, summaryLine]);
+  // Por padrão a CLI roda numa pasta vazia e temporária, e não no projeto. Assim ela não
+  // lê CLAUDE.md nem hooks do projeto e não manda o git status (branch, autor, commits).
+  let run: RunDir;
+  try {
+    run = prepareRunDir(cwdUri);
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`Claude CLI Lite: não foi possível criar a pasta temporária (${err?.message ?? String(err)}).`);
+    return;
+  }
+
+  let result: RunResult;
+  try {
+    result = await runClaude(prompt, run.cwd, [...cartNow.notes, ...run.notes, summaryLine]);
+  } finally {
+    run.cleanup();
+  }
   if (!result.ok) {
     return; // falha ou cancelamento: histórico e proposta anteriores ficam intactos
   }
@@ -269,6 +284,10 @@ function buildArgs(): string[] {
     "--disallowedTools",
     "mcp__*",
     "--no-session-persistence",
+    // Só as configurações do usuário. As do projeto (.claude/settings.json) podem ter hooks
+    // que rodariam código a cada pedido, e `-p` não mostra o diálogo de confiança.
+    "--setting-sources",
+    "user",
   ];
 
   if (model) {
@@ -285,10 +304,43 @@ function buildArgs(): string[] {
   return [...args, ...extraArgs];
 }
 
-/** Diretório de trabalho do processo: pasta do workspace do ficheiro, ou home. */
-function resolveCwd(uri: vscode.Uri): string {
-  const folder = vscode.workspace.getWorkspaceFolder(uri);
-  return folder ? folder.uri.fsPath : os.homedir();
+/** Pasta onde a CLI roda neste pedido, com o aviso para o canal e a limpeza. */
+interface RunDir {
+  cwd: string;
+  notes: string[];
+  cleanup: () => void;
+}
+
+/**
+ * Pasta de trabalho do processo. O padrão é uma pasta temporária vazia, criada para
+ * este pedido e apagada no fim. A pasta do projeto só é usada se o usuário ligou
+ * `includeGitContext` (configuração de máquina) E o workspace é confiável.
+ */
+function prepareRunDir(uri: vscode.Uri | undefined): RunDir {
+  const includeGit = vscode.workspace.getConfiguration("claudeCliLite").get<boolean>("includeGitContext", false);
+  if (includeGit && vscode.workspace.isTrusted && uri) {
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    if (folder) {
+      return {
+        cwd: folder.uri.fsPath,
+        notes: ["[aviso] includeGitContext ligado: a CLI roda na pasta do projeto e envia branch, autor e commits recentes do git."],
+        cleanup: () => {},
+      };
+    }
+  }
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-cli-lite-"));
+  return {
+    cwd: dir,
+    notes: [],
+    cleanup: () => {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        /* a pasta é temporária, se não der para apagar o sistema limpa depois */
+      }
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +350,10 @@ function resolveCwd(uri: vscode.Uri): string {
 /** Formato (parcial) dos eventos que a CLI emite com --output-format stream-json. */
 interface StreamJsonLine {
   type?: string;
+  subtype?: string;
+  /** Evento `system/init`: ferramentas e servidores MCP carregados pela CLI. */
+  tools?: unknown;
+  mcp_servers?: unknown;
   event?: {
     type?: string;
     delta?: {
@@ -326,6 +382,8 @@ interface StreamState {
   receivedAnyDelta: boolean;
   text: string;
   isError: boolean;
+  /** Preenchido quando o evento `init` mostra ferramentas ou MCP carregados (o pedido é abortado). */
+  initViolation?: string;
 }
 
 /** `headerLines` são escritas no canal antes do comando (resumo do contexto, avisos do carrinho). */
@@ -386,6 +444,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
         let stderrBuffer = "";
         const state: StreamState = { receivedAnyDelta: false, text: "", isError: false };
         let spawnFailed = false;
+        let abortedForSafety = false;
 
         child.stdout.setEncoding("utf8"); // evita cortar caracteres multi-byte entre chunks
         child.stderr.setEncoding("utf8");
@@ -398,6 +457,10 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
             stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
             if (line.trim().length > 0) {
               handleStreamLine(line, state);
+              if (state.initViolation && !abortedForSafety) {
+                abortedForSafety = true;
+                killTree(child);
+              }
             }
           }
         });
@@ -425,6 +488,15 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
           if (stdoutBuffer.trim().length > 0) {
             handleStreamLine(stdoutBuffer, state);
             stdoutBuffer = "";
+          }
+
+          if (state.initViolation) {
+            outputChannel.appendLine(`\n[pedido abortado por segurança] ${state.initViolation}.`);
+            vscode.window.showErrorMessage(
+              `Claude CLI Lite: pedido abortado por segurança (${state.initViolation}). Veja o canal "Claude CLI Lite".`
+            );
+            resolve({ ok: false, text: "" });
+            return;
           }
 
           // Cancelado pelo comando ou pelo botão da notificação: não é um erro.
@@ -467,6 +539,18 @@ function handleStreamLine(line: string, state: StreamState): void {
     // A CLI pode emitir ocasionalmente linhas de debug não-JSON.
     // Escrevemos tal como vêm (sem as acumular na resposta), em vez de rebentar o parser.
     outputChannel.append(line + "\n");
+    return;
+  }
+
+  // Falha fechada: a extensão promete uma CLI sem ferramentas e sem MCP. Se o evento `init`
+  // mostrar o contrário (ou não der para conferir), o pedido é abortado. Isto é uma trava
+  // de segurança, não a defesa principal (a defesa são as flags e a pasta neutra).
+  if (parsed.type === "system" && parsed.subtype === "init") {
+    if (!Array.isArray(parsed.tools) || !Array.isArray(parsed.mcp_servers)) {
+      state.initViolation = "não foi possível conferir as ferramentas e servidores MCP que a CLI carregou";
+    } else if (parsed.tools.length > 0 || parsed.mcp_servers.length > 0) {
+      state.initViolation = `a CLI carregou ${parsed.tools.length} ferramenta(s) e ${parsed.mcp_servers.length} servidor(es) MCP, e o esperado é nenhum`;
+    }
     return;
   }
 

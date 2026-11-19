@@ -156,6 +156,12 @@
           "default": [],
           "description": "Argumentos extra a passar à CLI, adicionados no fim da lista de flags."
         },
+        "claudeCliLite.includeGitContext": {
+          "type": "boolean",
+          "scope": "machine",
+          "default": false,
+          "description": "Se ligado, a CLI roda na pasta do projeto em vez de uma pasta temporária vazia, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Desligado por padrão."
+        },
         "claudeCliLite.historyMaxTurns": {
           "type": "number",
           "default": 3,
