@@ -3,6 +3,7 @@
   "displayName": "Claude CLI Lite",
   "description": "Ponte leve entre o editor e a instalação global do Claude Code (CLI) — sem contexto fantasma, sem chaves de API, sem SDKs de IA embutidos.",
   "version": "0.2.3",
+  "license": "Apache-2.0",
   "publisher": "local",
   "engines": {
     "vscode": "^1.74.0"
@@ -14,8 +15,15 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Ações de terminal ficam desativadas em workspaces não confiáveis."
-    }
+      "description": "Em workspace não confiável a extensão roda em modo estrito: a CLI usa uma pasta temporária vazia e os argumentos extras são ignorados.",
+      "restrictedConfigurations": [
+        "claudeCliLite.cliPath",
+        "claudeCliLite.extraArgs",
+        "claudeCliLite.model",
+        "claudeCliLite.includeGitContext"
+      ]
+    },
+    "virtualWorkspaces": false
   },
   "contributes": {
     "commands": [
@@ -141,7 +149,40 @@
         "claudeCliLite.model": {
           "type": "string",
           "default": "",
-          "description": "Modelo a usar (ex.: \"sonnet\", \"opus\"). Deixe vazio para usar o modelo por defeito da CLI."
+          "description": "Modelo a usar (ex.: \"sonnet\", \"opus\"). Deixe vazio para usar o modelo por defeito da CLI.",
+          "scope": "machine",
+          "pattern": "^[A-Za-z0-9._:/\\[\\]-]{0,100}$",
+          "patternErrorMessage": "Use só letras, números e . _ : / [ ] - (até 100 caracteres)."
+        },
+        "claudeCliLite.effort": {
+          "type": "string",
+          "scope": "machine",
+          "default": "",
+          "enum": [
+            "",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "description": "Nível de esforço do modelo (--effort). Vazio usa o padrão da CLI."
+        },
+        "claudeCliLite.fallbackModel": {
+          "type": "string",
+          "scope": "machine",
+          "default": "",
+          "pattern": "^[A-Za-z0-9._:/\\[\\]-]{0,100}$",
+          "patternErrorMessage": "Use só letras, números e . _ : / [ ] - (até 100 caracteres).",
+          "description": "Modelo de reserva (--fallback-model), usado se o principal falhar. Vazio desliga."
+        },
+        "claudeCliLite.maxBudgetUsd": {
+          "type": "number",
+          "scope": "machine",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 10000,
+          "description": "Gasto máximo em dólares por pedido (--max-budget-usd). 0 desliga."
         },
         "claudeCliLite.extraArgs": {
           "type": "array",
@@ -150,7 +191,42 @@
             "type": "string"
           },
           "default": [],
-          "description": "Argumentos extra a passar à CLI, adicionados no fim da lista de flags."
+          "description": "MODO AVANÇADO. Argumentos extras para a CLI, no fim da chamada. Flags que mexeriam em ferramentas, MCP, permissões, login ou formato da saída são sempre recusadas, e argumentos soltos também. Ignorados em workspace não confiável."
+        },
+        "claudeCliLite.extraEnvNames": {
+          "type": "array",
+          "scope": "machine",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Nomes de variáveis de ambiente que a CLI também pode receber, além da lista padrão (por exemplo AWS_PROFILE e AWS_REGION, para quem usa o Bedrock). Só os nomes; os valores vêm do ambiente do VS Code."
+        },
+        "claudeCliLite.includeGitContext": {
+          "type": "boolean",
+          "scope": "machine",
+          "default": false,
+          "description": "Se ligado, a CLI roda na pasta do projeto em vez de uma pasta temporária vazia, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Desligado por padrão."
+        },
+        "claudeCliLite.alwaysPreview": {
+          "type": "boolean",
+          "scope": "machine",
+          "default": false,
+          "description": "Se ligado, mostra a prévia do que vai ser enviado antes de TODO pedido. Por padrão ela aparece só no primeiro uso."
+        },
+        "claudeCliLite.timeoutIdleSeconds": {
+          "type": "number",
+          "scope": "machine",
+          "default": 180,
+          "minimum": 0,
+          "description": "Encerra o pedido se a CLI ficar este tempo (em segundos) sem enviar nada. 0 desliga."
+        },
+        "claudeCliLite.timeoutTotalSeconds": {
+          "type": "number",
+          "scope": "machine",
+          "default": 1200,
+          "minimum": 0,
+          "description": "Encerra o pedido se ele passar deste tempo total (em segundos). 0 desliga."
         },
         "claudeCliLite.historyMaxTurns": {
           "type": "number",
@@ -174,7 +250,10 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package"
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package",
+    "test": "npm run compile && node --test \"out/test/*.test.js\"",
+    "check:package": "npm run compile && node scripts/check-package.js"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -183,4 +262,3 @@
     "typescript": "^5.4.0"
   }
 }
-

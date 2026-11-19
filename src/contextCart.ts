@@ -5,6 +5,9 @@
  */
 
 import * as vscode from "vscode";
+import * as fs from "fs";
+import { describeReadError, findHiddenChars, isInsideAny, isSensitivePath } from "./cartPolicy";
+import { findSecrets } from "./secrets";
 
 export interface CartFile {
   /** Caminho relativo ao workspace. */
@@ -23,6 +26,26 @@ export function setOnChange(cb: () => void): void {
 
 export function count(): number {
   return files.size;
+}
+
+/** Pergunta (modal) antes de incluir algo arriscado. Devolve true só se o usuário confirmar. */
+async function confirmRisk(message: string): Promise<boolean> {
+  const choice = await vscode.window.showWarningMessage(message, { modal: true }, "Adicionar mesmo assim");
+  return choice === "Adicionar mesmo assim";
+}
+
+function realpathOrSame(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
+/** Dentro de alguma pasta do workspace, seguindo links simbólicos (um link para fora conta como fora). */
+function isInsideWorkspace(file: vscode.Uri): boolean {
+  const roots = (vscode.workspace.workspaceFolders ?? []).map((f) => realpathOrSame(f.uri.fsPath));
+  return isInsideAny(realpathOrSame(file.fsPath), roots);
 }
 
 /**
@@ -50,6 +73,15 @@ export async function addToContext(uri?: vscode.Uri, uris?: vscode.Uri[]): Promi
         }
       } catch {
         vscode.window.showWarningMessage(`Claude CLI Lite: não foi possível ler "${u.fsPath}".`);
+        continue;
+      }
+    }
+    if (u.scheme === "file") {
+      const rel = vscode.workspace.asRelativePath(u, false);
+      if (isSensitivePath(u.fsPath) && !(await confirmRisk(`"${rel}" parece conter segredos (pelo nome ou pela pasta). Adicionar ao contexto mesmo assim?`))) {
+        continue;
+      }
+      if (!isInsideWorkspace(u) && !(await confirmRisk(`"${rel}" está fora das pastas do workspace. Adicionar ao contexto mesmo assim?`))) {
         continue;
       }
     }
@@ -127,10 +159,16 @@ export async function readCart(): Promise<{ files: CartFile[]; notes: string[] }
         continue;
       }
       result.push({ path: rel, lang: doc.languageId, content });
-    } catch {
-      files.delete(key);
-      removed = true;
-      notes.push(`[contexto] "${rel}" já não existe; removido do carrinho.`);
+    } catch (err) {
+      // Só some do carrinho o que realmente não existe mais; os outros erros são avisados.
+      const info = describeReadError(err);
+      if (info.kind === "missing") {
+        files.delete(key);
+        removed = true;
+        notes.push(`[contexto] "${rel}" já não existe; removido do carrinho.`);
+      } else {
+        notes.push(`[contexto] não foi possível ler "${rel}" (${info.detail}); ele continua no carrinho, mas não foi enviado.`);
+      }
     }
   }
 
@@ -157,4 +195,37 @@ export async function confirmSize(list: CartFile[]): Promise<boolean> {
     "Enviar"
   );
   return choice === "Enviar";
+}
+
+/**
+ * Antes de enviar: procura possíveis segredos e caracteres ocultos (bidi, invisíveis)
+ * nos arquivos do contexto e na seleção. Mostra só o tipo e a linha, nunca o valor.
+ * Devolve false se o usuário cancelar.
+ */
+export async function confirmFindings(list: CartFile[], selectedText: string): Promise<boolean> {
+  const lines: string[] = [];
+  const check = (label: string, text: string): void => {
+    for (const f of findSecrets(text)) {
+      lines.push(`• ${label}, linha ${f.line}: ${f.type}`);
+    }
+    for (const h of findHiddenChars(text)) {
+      lines.push(`• ${label}, linha ${h.line}: caractere ${h.kind}`);
+    }
+  };
+  for (const f of list) {
+    check(f.path, f.content);
+  }
+  if (selectedText) {
+    check("seleção", selectedText);
+  }
+  if (lines.length === 0) {
+    return true;
+  }
+  const shown = lines.slice(0, 10).join("\n") + (lines.length > 10 ? `\n… e mais ${lines.length - 10}` : "");
+  const choice = await vscode.window.showWarningMessage(
+    `Encontrei possíveis segredos ou caracteres ocultos no que vai ser enviado:\n${shown}\n\nEnviar mesmo assim?`,
+    { modal: true },
+    "Enviar mesmo assim"
+  );
+  return choice === "Enviar mesmo assim";
 }
