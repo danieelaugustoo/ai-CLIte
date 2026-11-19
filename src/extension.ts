@@ -30,6 +30,8 @@ import * as proposal from "./proposal";
 import { isValidModel } from "./validation";
 import { redact, StreamRedactor } from "./secrets";
 import { buildPreview } from "./preview";
+import { buildTypedArgs, validateExtraArgs } from "./args";
+import { buildChildEnv } from "./env";
 
 // ---------------------------------------------------------------------------
 // Estado do módulo
@@ -134,6 +136,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("claudeCliLite.cancel", cancelCurrent)
   );
 
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("claudeCliLite.extraArgs")) {
+        updateStatusBar();
+      }
+    })
+  );
+
   updateStatusBar();
 }
 
@@ -177,6 +187,15 @@ async function ask(mode: "new" | "continue"): Promise<void> {
 }
 
 async function runAsk(mode: "new" | "continue"): Promise<void> {
+  const rejected = rejectedExtraArgs();
+  if (rejected.length > 0) {
+    const list = rejected.slice(0, 3).map((r) => `${r.arg} (${r.reason})`).join("; ");
+    vscode.window.showErrorMessage(
+      `Claude CLI Lite: claudeCliLite.extraArgs tem argumentos que não são permitidos: ${list}. Corrija as configurações antes de continuar.`
+    );
+    return;
+  }
+
   // Windows bloqueado no preview até a verificação em máquina real (S19).
   if (isPlatformBlocked(process.platform)) {
     vscode.window.showErrorMessage(PLATFORM_BLOCKED_MESSAGE);
@@ -294,6 +313,7 @@ async function runAsk(mode: "new" | "continue"): Promise<void> {
       historyChars,
       selectionChars: selectedText.length,
       notes: [...cartNow.notes, ...run.notes],
+      envNames: buildChildEnv(process.env, vscode.workspace.getConfiguration("claudeCliLite").get<string[]>("extraEnvNames", [])).names,
     });
     const approved = await confirmPreview(previewText);
     if (!approved) {
@@ -348,12 +368,17 @@ function cancelCurrent(): void {
 function updateStatusBar(): void {
   const turns = conversation.getTurns().length;
   const files = cart.count();
-  if (turns === 0 && files === 0) {
+  // Aviso permanente enquanto houver argumentos extras configurados (modo avançado).
+  const extra = vscode.workspace.getConfiguration("claudeCliLite").get<unknown>("extraArgs", []);
+  const advanced = Array.isArray(extra) && extra.length > 0;
+  if (turns === 0 && files === 0 && !advanced) {
     statusBar.hide();
     return;
   }
-  statusBar.text = `$(comment-discussion) ${turns}  $(file) ${files}`;
-  statusBar.tooltip = `Claude CLI Lite: ${turns} turno(s) na conversa · ${files} ficheiro(s) no contexto`;
+  statusBar.text = `${advanced ? "$(warning) " : ""}$(comment-discussion) ${turns}  $(file) ${files}`;
+  statusBar.tooltip =
+    `Claude CLI Lite: ${turns} turno(s) na conversa · ${files} ficheiro(s) no contexto` +
+    (advanced ? " · MODO AVANÇADO: há argumentos extras da CLI configurados (claudeCliLite.extraArgs)" : "");
   statusBar.show();
 }
 
@@ -380,7 +405,6 @@ async function statusMenu(): Promise<void> {
 function buildArgs(quiet = false): string[] {
   const config = vscode.workspace.getConfiguration("claudeCliLite");
   const model = config.get<string>("model", "").trim();
-  const extraArgs = config.get<string[]>("extraArgs", []);
 
   const args = [
     "-p",
@@ -413,8 +437,29 @@ function buildArgs(quiet = false): string[] {
     }
   }
 
+  // Opções tipadas (effort, fallbackModel, maxBudgetUsd): só entram valores válidos.
+  const typed = buildTypedArgs({
+    effort: config.get<string>("effort", ""),
+    fallbackModel: config.get<string>("fallbackModel", ""),
+    maxBudgetUsd: config.get<number>("maxBudgetUsd", 0),
+  });
+  if (!quiet && typed.warnings.length > 0) {
+    vscode.window.showWarningMessage(`Claude CLI Lite: ${typed.warnings.join("; ")}.`);
+  }
+  args.push(...typed.args);
+
   // Em workspace não confiável nenhum argumento extra passa, nem os do usuário: modo estrito.
-  return [...args, ...(vscode.workspace.isTrusted ? extraArgs : [])];
+  // As flags proibidas já foram barradas em `rejectedExtraArgs` antes do pedido.
+  const extra = vscode.workspace.isTrusted ? validateExtraArgs(config.get<unknown>("extraArgs", [])).args : [];
+  return [...args, ...extra];
+}
+
+/** Flags proibidas em `extraArgs`, para avisar antes de pedir qualquer coisa ao usuário. */
+function rejectedExtraArgs(): Array<{ arg: string; reason: string }> {
+  if (!vscode.workspace.isTrusted) {
+    return []; // em workspace não confiável os extras são ignorados de qualquer jeito
+  }
+  return validateExtraArgs(vscode.workspace.getConfiguration("claudeCliLite").get<unknown>("extraArgs", [])).rejected;
 }
 
 /** Pasta onde a CLI roda neste pedido, com o aviso para o canal e a limpeza. */
@@ -509,6 +554,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
   const config = vscode.workspace.getConfiguration("claudeCliLite");
   const cliPath = config.get<string>("cliPath", "claude").trim() || "claude";
   const args = buildArgs();
+  const childEnv = buildChildEnv(process.env, config.get<string[]>("extraEnvNames", []));
   const idleMs = Math.max(0, config.get<number>("timeoutIdleSeconds", 180)) * 1000;
   const totalMs = Math.max(0, config.get<number>("timeoutTotalSeconds", 1200)) * 1000;
 
@@ -545,7 +591,7 @@ async function runClaude(prompt: string, cwd: string, headerLines: string[] = []
         // (no Windows, o shim .cmd do npm vai pelo cmd.exe com argumentos permitidos).
         let child: ChildProcessWithoutNullStreams;
         try {
-          child = launchCli(cliPath, args, { cwd, env: { ...process.env, NO_COLOR: "1" } });
+          child = launchCli(cliPath, args, { cwd, env: { ...childEnv.env, NO_COLOR: "1" } });
         } catch (err: any) {
           reportSpawnFailure(err, cliPath);
           finish({ ok: false, text: "" });

@@ -59,7 +59,11 @@ npm run package
 |---|---|---|
 | `claudeCliLite.cliPath` | `"claude"` | Caminho do executável. Use o caminho completo se ele não estiver no PATH, por exemplo `C:\Users\<usuario>\AppData\Roaming\npm\claude.cmd` |
 | `claudeCliLite.model` | `""` | Modelo a usar (`sonnet`, `opus`). Vazio usa o padrão da CLI. Só letras, números e `. _ : / [ ] -`; qualquer outro caractere faz o valor ser ignorado. Escopo de máquina |
-| `claudeCliLite.extraArgs` | `[]` | Argumentos extras acrescentados no fim da chamada. Ignorados em workspace não confiável |
+| `claudeCliLite.extraArgs` | `[]` | **Modo avançado.** Argumentos extras acrescentados no fim da chamada. Flags que mexeriam em ferramentas, MCP, permissões, login ou formato da saída são sempre recusadas, e argumentos soltos também. Ignorados em workspace não confiável. Enquanto houver algo aqui, a barra de status mostra um aviso |
+| `claudeCliLite.effort` | `""` | Nível de esforço (`low`, `medium`, `high`, `xhigh`, `max`). Vazio usa o padrão da CLI. Escopo de máquina |
+| `claudeCliLite.fallbackModel` | `""` | Modelo de reserva. Mesmas regras de caracteres do `model`. Escopo de máquina |
+| `claudeCliLite.maxBudgetUsd` | `0` | Gasto máximo em dólares por pedido. `0` desliga. Escopo de máquina |
+| `claudeCliLite.extraEnvNames` | `[]` | Nomes de variáveis de ambiente que a CLI também pode receber, além da lista padrão (ex.: `AWS_PROFILE`, para quem usa o Bedrock). Escopo de máquina |
 | `claudeCliLite.includeGitContext` | `false` | Se ligado, a CLI roda na pasta do projeto, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Escopo de máquina |
 | `claudeCliLite.alwaysPreview` | `false` | Mostra a prévia do que vai ser enviado antes de todo pedido. Por padrão ela aparece só no primeiro uso. Escopo de máquina |
 | `claudeCliLite.timeoutIdleSeconds` | `180` | Encerra o pedido se a CLI ficar esse tempo sem enviar nada. `0` desliga. Escopo de máquina |
@@ -77,6 +81,7 @@ Se a CLI não for encontrada, a extensão mostra um aviso com um botão que leva
 - **A CLI não roda no seu projeto.** Por padrão ela roda numa pasta temporária vazia, apagada no fim de cada pedido, e só com as configurações do usuário (`--setting-sources user`). Assim os hooks de `.claude/settings.json` de um repositório não são executados, e o git status não vai junto. Quem quiser o git status liga `includeGitContext`.
 - **`cliPath`, `extraArgs`, `model` e `includeGitContext` têm escopo de máquina**, então um repositório aberto não consegue trocar o executável, os argumentos nem o modelo pelo `settings.json` do workspace.
 - **Workspaces não confiáveis** rodam em modo estrito: os argumentos extras são ignorados e a CLI usa a pasta temporária.
+- **A CLI recebe só o ambiente de que precisa.** Em vez do ambiente inteiro do VS Code, passam `PATH`, `HOME`, idioma, proxy e certificados, e as variáveis `ANTHROPIC_*` e `CLAUDE_*`. Chaves de outros serviços, `NODE_OPTIONS` e `LD_PRELOAD` ficam de fora. Quem usa o Bedrock ou o Vertex acrescenta os nomes em `extraEnvNames`. A prévia lista os nomes repassados, nunca os valores.
 - **Contexto mínimo, não zero.** Além do que você escolhe (instrução, seleção e arquivos do contexto), a CLI acrescenta por conta própria instruções de sistema de alguns milhares de caracteres. Quem recebe tudo isso é o provedor que a CLI usa.
 - **Windows: em revisão de segurança.** O uso de `shell: true` no Windows ainda precisa de correção, e a extensão ainda não foi verificada lá. Por enquanto, use Linux ou macOS.
 - **Prévia do que vai ser enviado.** No primeiro uso (e sempre, com `alwaysPreview` ligado) a extensão abre ao lado um texto somente leitura com o modelo, a pasta de execução, os argumentos, cada arquivo do contexto e o texto exato que vai pelo `stdin`. Você escolhe Enviar ou Cancelar; ignorar o aviso conta como cancelar.

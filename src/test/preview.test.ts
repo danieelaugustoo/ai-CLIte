@@ -14,6 +14,7 @@ const base: PreviewInput = {
   historyChars: 300,
   selectionChars: 40,
   notes: [],
+  envNames: ["HOME", "PATH"],
 };
 
 test("a prévia traz o texto enviado exatamente, byte a byte", () => {
@@ -53,4 +54,10 @@ test("a estimativa de tokens é rotulada como estimativa", () => {
   assert.equal(estimateTokens(400), 100);
   assert.equal(estimateTokens(401), 101);
   assert.match(buildPreview(base), /só uma estimativa/);
+});
+
+test("lista só os nomes das variáveis de ambiente, nunca os valores", () => {
+  const text = buildPreview({ ...base, envNames: ["ANTHROPIC_API_KEY", "PATH"] });
+  assert.match(text, /só os nomes\): ANTHROPIC_API_KEY, PATH/);
+  assert.match(buildPreview({ ...base, envNames: [] }), /: nenhuma/);
 });

@@ -22,6 +22,8 @@ export interface PreviewInput {
   historyChars: number;
   selectionChars: number;
   notes: string[];
+  /** Nomes (nunca valores) das variáveis de ambiente repassadas à CLI. */
+  envNames: string[];
 }
 
 export const PREVIEW_START = "----- TEXTO EXATO ENVIADO PELO STDIN (começa na linha abaixo) -----";
@@ -58,6 +60,7 @@ export function buildPreview(i: PreviewInput): string {
       lines.push(`  - ${f.path} (${f.chars} caracteres)`);
     }
   }
+  lines.push(`Variáveis de ambiente repassadas à CLI (só os nomes): ${i.envNames.length ? i.envNames.join(", ") : "nenhuma"}`);
   for (const n of i.notes) {
     lines.push(n);
   }
