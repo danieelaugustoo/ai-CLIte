@@ -28,6 +28,7 @@ import * as cart from "./contextCart";
 import * as proposal from "./proposal";
 import { isValidModel } from "./validation";
 import { redact, StreamRedactor } from "./secrets";
+import { buildPreview } from "./preview";
 
 // ---------------------------------------------------------------------------
 // Estado do módulo
@@ -44,6 +45,38 @@ let cancelRequested = false;
 
 /** Barra de estado: nº de turnos na memória e de ficheiros no carrinho. */
 let statusBar: vscode.StatusBarItem;
+
+/** Contexto da extensão, para guardar "a prévia já foi mostrada" no globalState. */
+let extContext: vscode.ExtensionContext;
+
+// Prévia do envio: documento virtual somente leitura (S7).
+const PREVIEW_SCHEME = "claude-cli-lite-preview";
+const previewContents = new Map<string, string>();
+let previewCounter = 0;
+
+class PreviewProvider implements vscode.TextDocumentContentProvider {
+  provideTextDocumentContent(uri: vscode.Uri): string {
+    return previewContents.get(uri.path) ?? "";
+  }
+}
+
+/** Abre a prévia ao lado e pergunta se pode enviar. Fechar ou ignorar o aviso conta como cancelar. */
+async function confirmPreview(text: string): Promise<boolean> {
+  const id = `/previa-${++previewCounter}.txt`;
+  previewContents.set(id, text);
+  try {
+    const doc = await vscode.workspace.openTextDocument(vscode.Uri.from({ scheme: PREVIEW_SCHEME, path: id }));
+    await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside, preserveFocus: true });
+    const choice = await vscode.window.showInformationMessage(
+      "Claude CLI Lite: revise o que vai ser enviado (aberto ao lado). Enviar?",
+      "Enviar",
+      "Cancelar"
+    );
+    return choice === "Enviar";
+  } finally {
+    previewContents.delete(id);
+  }
+}
 
 /** Tudo o que vai para o canal de saída passa por `redact`, para nenhum segredo aparecer em claro (S11). */
 function logAppend(text: string): void {
@@ -64,6 +97,8 @@ function logRaw(text: string): void {
 // ---------------------------------------------------------------------------
 
 export function activate(context: vscode.ExtensionContext): void {
+  extContext = context;
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, new PreviewProvider()));
   outputChannel = vscode.window.createOutputChannel("Claude CLI Lite");
   context.subscriptions.push(outputChannel);
 
@@ -219,6 +254,30 @@ async function ask(mode: "new" | "continue"): Promise<void> {
     return;
   }
 
+  // Prévia do que vai ser enviado: no primeiro uso, e sempre que `alwaysPreview` estiver ligado.
+  const alwaysPreview = vscode.workspace.getConfiguration("claudeCliLite").get<boolean>("alwaysPreview", false);
+  if (alwaysPreview || !extContext.globalState.get<boolean>("previewShown.claude", false)) {
+    const previewText = buildPreview({
+      engine: "Claude Code CLI",
+      model: vscode.workspace.getConfiguration("claudeCliLite").get<string>("model", "").trim(),
+      cwdMode: run.mode,
+      workspaceTrusted: vscode.workspace.isTrusted,
+      args: buildArgs(true),
+      prompt,
+      files: cartNow.files.map((f) => ({ path: f.path, chars: f.content.length })),
+      historyTurns: turns.length,
+      historyChars,
+      selectionChars: selectedText.length,
+      notes: [...cartNow.notes, ...run.notes],
+    });
+    const approved = await confirmPreview(previewText);
+    if (!approved) {
+      run.cleanup();
+      return;
+    }
+    await extContext.globalState.update("previewShown.claude", true);
+  }
+
   let result: RunResult;
   try {
     result = await runClaude(prompt, run.cwd, [...cartNow.notes, ...run.notes, summaryLine]);
@@ -291,7 +350,7 @@ async function statusMenu(): Promise<void> {
 // Construção dos argumentos da CLI (modo "cirúrgico")
 // ---------------------------------------------------------------------------
 
-function buildArgs(): string[] {
+function buildArgs(quiet = false): string[] {
   const config = vscode.workspace.getConfiguration("claudeCliLite");
   const model = config.get<string>("model", "").trim();
   const extraArgs = config.get<string[]>("extraArgs", []);
@@ -319,7 +378,7 @@ function buildArgs(): string[] {
   if (model) {
     if (isValidModel(model)) {
       args.push("--model", model);
-    } else {
+    } else if (!quiet) {
       // Nunca repassamos um valor estranho à CLI.
       vscode.window.showWarningMessage(
         "Claude CLI Lite: o nome do modelo tem caracteres não permitidos e foi ignorado. Corrija em claudeCliLite.model."
@@ -334,6 +393,7 @@ function buildArgs(): string[] {
 /** Pasta onde a CLI roda neste pedido, com o aviso para o canal e a limpeza. */
 interface RunDir {
   cwd: string;
+  mode: "neutra" | "projeto";
   notes: string[];
   cleanup: () => void;
 }
@@ -350,6 +410,7 @@ function prepareRunDir(uri: vscode.Uri | undefined): RunDir {
     if (folder) {
       return {
         cwd: folder.uri.fsPath,
+        mode: "projeto",
         notes: ["[aviso] includeGitContext ligado: a CLI roda na pasta do projeto e envia branch, autor e commits recentes do git."],
         cleanup: () => {},
       };
@@ -359,6 +420,7 @@ function prepareRunDir(uri: vscode.Uri | undefined): RunDir {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-cli-lite-"));
   return {
     cwd: dir,
+    mode: "neutra",
     notes: vscode.workspace.isTrusted ? [] : ["[workspace não confiável] modo estrito: extraArgs ignorados e CLI numa pasta temporária vazia."],
     cleanup: () => {
       try {

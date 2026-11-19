@@ -169,6 +169,12 @@
           "default": false,
           "description": "Se ligado, a CLI roda na pasta do projeto em vez de uma pasta temporária vazia, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Desligado por padrão."
         },
+        "claudeCliLite.alwaysPreview": {
+          "type": "boolean",
+          "scope": "machine",
+          "default": false,
+          "description": "Se ligado, mostra a prévia do que vai ser enviado antes de TODO pedido. Por padrão ela aparece só no primeiro uso."
+        },
         "claudeCliLite.historyMaxTurns": {
           "type": "number",
           "default": 3,
