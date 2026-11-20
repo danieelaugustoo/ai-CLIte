@@ -1,4 +1,4 @@
-"""Ficheiro cobaia para testar a extensão Claude CLI Lite.
+"""Ficheiro cobaia para testar a extensão CLIte-ai.
 
 Não faz nada de útil: serve só para selecionar trechos e pedir ao Claude
 para explicar, refatorar, encontrar bugs ou escrever testes.

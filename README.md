@@ -1,4 +1,6 @@
-# Claude CLI Lite
+# CLIte-ai
+
+> Antes chamada **Claude CLI Lite**. O nome mudou para não usar "Claude" no nome do produto. Veja "Migração do nome antigo" mais abaixo.
 
 Extensão para VS Code que liga o editor à instalação do [Claude Code](https://claude.com/claude-code) que você já tem autenticada no terminal.
 
@@ -10,9 +12,9 @@ As integrações completas mandam a árvore do projeto e arquivos inteiros como 
 
 ## O que faz
 
-- **Pergunta sobre a seleção.** Selecione um trecho, aperte `Ctrl+Shift+C` e escreva a instrução. A resposta aparece em streaming no canal de saída "Claude CLI Lite".
+- **Pergunta sobre a seleção.** Selecione um trecho, aperte `Ctrl+Shift+C` e escreva a instrução. A resposta aparece em streaming no canal de saída "CLIte-ai".
 - **Conversa com memória curta.** `Ctrl+Alt+C` continua a conversa. O histórico fica só na memória da extensão, limitado por número de turnos e de caracteres, e some ao recarregar a janela.
-- **Carrinho de contexto.** Clique com o botão direito em um arquivo e escolha "Claude: Adicionar ao contexto". O conteúdo é lido na hora do envio, então vale a versão atual, mesmo sem salvar.
+- **Carrinho de contexto.** Clique com o botão direito em um arquivo e escolha "CLIte-ai: Adicionar ao contexto". O conteúdo é lido na hora do envio, então vale a versão atual, mesmo sem salvar.
 - **Propostas com diff.** Quando a resposta traz código, a extensão avisa e deixa você abrir um diff lado a lado para aplicar ou descartar. Nada é alterado sem a sua confirmação.
 - **Barra de status.** Mostra quantos turnos há na conversa e quantos arquivos estão no contexto.
 
@@ -20,17 +22,17 @@ As integrações completas mandam a árvore do projeto e arquivos inteiros como 
 
 | Comando | Atalho | O que faz |
 |---|---|---|
-| Claude: Nova pergunta sobre seleção | `Ctrl+Shift+C` | Começa um pedido com o trecho selecionado |
-| Claude: Continuar conversa | `Ctrl+Alt+C` | Envia outra mensagem mantendo o histórico |
-| Claude: Limpar conversa | | Apaga o histórico em memória |
-| Claude: Adicionar ao contexto | menu de contexto | Põe o arquivo no carrinho |
-| Claude: Gerir ficheiros do contexto | | Lista e remove arquivos do carrinho |
-| Claude: Limpar contexto | | Esvazia o carrinho |
-| Claude: Ver alterações propostas | | Abre o diff da proposta pendente |
-| Claude: Aplicar alterações | botão no diff | Grava a proposta no arquivo |
-| Claude: Descartar alterações | botão no diff | Descarta a proposta |
-| Claude: Estado | clique na barra de status | Menu com as ações acima |
-| Claude: Cancelar pedido | | Interrompe o pedido em andamento |
+| CLIte-ai: Nova pergunta sobre seleção | `Ctrl+Shift+C` | Começa um pedido com o trecho selecionado |
+| CLIte-ai: Continuar conversa | `Ctrl+Alt+C` | Envia outra mensagem mantendo o histórico |
+| CLIte-ai: Limpar conversa | | Apaga o histórico em memória |
+| CLIte-ai: Adicionar ao contexto | menu de contexto | Põe o arquivo no carrinho |
+| CLIte-ai: Gerir ficheiros do contexto | | Lista e remove arquivos do carrinho |
+| CLIte-ai: Limpar contexto | | Esvazia o carrinho |
+| CLIte-ai: Ver alterações propostas | | Abre o diff da proposta pendente |
+| CLIte-ai: Aplicar alterações | botão no diff | Grava a proposta no arquivo |
+| CLIte-ai: Descartar alterações | botão no diff | Descarta a proposta |
+| CLIte-ai: Estado | clique na barra de status | Menu com as ações acima |
+| CLIte-ai: Cancelar pedido | | Interrompe o pedido em andamento |
 
 No macOS os atalhos usam `Cmd` no lugar de `Ctrl`.
 
@@ -57,20 +59,20 @@ npm run package
 
 | Configuração | Padrão | Descrição |
 |---|---|---|
-| `claudeCliLite.cliPath` | `"claude"` | Caminho do executável. Use o caminho completo se ele não estiver no PATH, por exemplo `C:\Users\<usuario>\AppData\Roaming\npm\claude.cmd` |
-| `claudeCliLite.model` | `""` | Modelo a usar (`sonnet`, `opus`). Vazio usa o padrão da CLI. Só letras, números e `. _ : / [ ] -`; qualquer outro caractere faz o valor ser ignorado. Escopo de máquina |
-| `claudeCliLite.extraArgs` | `[]` | **Modo avançado.** Argumentos extras acrescentados no fim da chamada. Flags que mexeriam em ferramentas, MCP, permissões, login ou formato da saída são sempre recusadas, e argumentos soltos também. Ignorados em workspace não confiável. Enquanto houver algo aqui, a barra de status mostra um aviso |
-| `claudeCliLite.effort` | `""` | Nível de esforço (`low`, `medium`, `high`, `xhigh`, `max`). Vazio usa o padrão da CLI. Escopo de máquina |
-| `claudeCliLite.fallbackModel` | `""` | Modelo de reserva. Mesmas regras de caracteres do `model`. Escopo de máquina |
-| `claudeCliLite.maxBudgetUsd` | `0` | Gasto máximo em dólares por pedido. `0` desliga. Escopo de máquina |
-| `claudeCliLite.extraEnvNames` | `[]` | Nomes de variáveis de ambiente que a CLI também pode receber, além da lista padrão (ex.: `AWS_PROFILE`, para quem usa o Bedrock). Escopo de máquina |
-| `claudeCliLite.includeGitContext` | `false` | Se ligado, a CLI roda na pasta do projeto, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Escopo de máquina |
-| `claudeCliLite.alwaysPreview` | `false` | Mostra a prévia do que vai ser enviado antes de todo pedido. Por padrão ela aparece só no primeiro uso. Escopo de máquina |
-| `claudeCliLite.timeoutIdleSeconds` | `180` | Encerra o pedido se a CLI ficar esse tempo sem enviar nada. `0` desliga. Escopo de máquina |
-| `claudeCliLite.timeoutTotalSeconds` | `1200` | Encerra o pedido se ele passar desse tempo total. `0` desliga. Escopo de máquina |
-| `claudeCliLite.historyMaxTurns` | `3` | Máximo de pares pergunta/resposta guardados |
-| `claudeCliLite.historyMaxChars` | `20000` | Limite de caracteres do histórico. Os turnos mais antigos saem primeiro |
-| `claudeCliLite.contextMaxChars` | `60000` | Acima desse total nos arquivos do contexto, a extensão pede confirmação antes de enviar |
+| `cliteAi.cliPath` | `"claude"` | Caminho do executável. Use o caminho completo se ele não estiver no PATH, por exemplo `C:\Users\<usuario>\AppData\Roaming\npm\claude.cmd` |
+| `cliteAi.model` | `""` | Modelo a usar (`sonnet`, `opus`). Vazio usa o padrão da CLI. Só letras, números e `. _ : / [ ] -`; qualquer outro caractere faz o valor ser ignorado. Escopo de máquina |
+| `cliteAi.extraArgs` | `[]` | **Modo avançado.** Argumentos extras acrescentados no fim da chamada. Flags que mexeriam em ferramentas, MCP, permissões, login ou formato da saída são sempre recusadas, e argumentos soltos também. Ignorados em workspace não confiável. Enquanto houver algo aqui, a barra de status mostra um aviso |
+| `cliteAi.effort` | `""` | Nível de esforço (`low`, `medium`, `high`, `xhigh`, `max`). Vazio usa o padrão da CLI. Escopo de máquina |
+| `cliteAi.fallbackModel` | `""` | Modelo de reserva. Mesmas regras de caracteres do `model`. Escopo de máquina |
+| `cliteAi.maxBudgetUsd` | `0` | Gasto máximo em dólares por pedido. `0` desliga. Escopo de máquina |
+| `cliteAi.extraEnvNames` | `[]` | Nomes de variáveis de ambiente que a CLI também pode receber, além da lista padrão (ex.: `AWS_PROFILE`, para quem usa o Bedrock). Escopo de máquina |
+| `cliteAi.includeGitContext` | `false` | Se ligado, a CLI roda na pasta do projeto, e o git status (branch, autor e últimos commits) vai junto em cada pedido. Só vale em workspace confiável. Escopo de máquina |
+| `cliteAi.alwaysPreview` | `false` | Mostra a prévia do que vai ser enviado antes de todo pedido. Por padrão ela aparece só no primeiro uso. Escopo de máquina |
+| `cliteAi.timeoutIdleSeconds` | `180` | Encerra o pedido se a CLI ficar esse tempo sem enviar nada. `0` desliga. Escopo de máquina |
+| `cliteAi.timeoutTotalSeconds` | `1200` | Encerra o pedido se ele passar desse tempo total. `0` desliga. Escopo de máquina |
+| `cliteAi.historyMaxTurns` | `3` | Máximo de pares pergunta/resposta guardados |
+| `cliteAi.historyMaxChars` | `20000` | Limite de caracteres do histórico. Os turnos mais antigos saem primeiro |
+| `cliteAi.contextMaxChars` | `60000` | Acima desse total nos arquivos do contexto, a extensão pede confirmação antes de enviar |
 
 Se a CLI não for encontrada, a extensão mostra um aviso com um botão que leva direto à configuração `cliPath`.
 
@@ -87,6 +89,14 @@ Se a CLI não for encontrada, a extensão mostra um aviso com um botão que leva
 - **Prévia do que vai ser enviado.** No primeiro uso (e sempre, com `alwaysPreview` ligado) a extensão abre ao lado um texto somente leitura com o modelo, a pasta de execução, os argumentos, cada arquivo do contexto e o texto exato que vai pelo `stdin`. Você escolhe Enviar ou Cancelar; ignorar o aviso conta como cancelar.
 - **Segredos e caracteres ocultos.** Arquivos com cara de sensíveis (`.env`, chaves, `id_rsa`...) e arquivos de fora do workspace pedem confirmação para entrar no contexto. Antes de enviar, o contexto e a seleção passam por um scanner de chaves conhecidas e de caracteres bidi e invisíveis. Só o tipo e a linha aparecem, nunca o valor. O canal de saída e as notificações redigem chaves em claro.
 - **Um pedido por vez, do começo ao fim.** O pedido só deixa de estar em curso quando o processo realmente termina; cancelar encerra o processo e os filhos dele (SIGINT, depois SIGTERM e SIGKILL), e a saída de um pedido cancelado é descartada. Há limites de tempo (parado e total), de tamanho do texto enviado (9 MB), de uma linha de saída e da resposta.
+
+## Migração do nome antigo
+
+A extensão se chamava **Claude CLI Lite** (comandos e configurações `claudeCliLite.*`). Agora é **CLIte-ai** (`cliteAi.*`).
+
+- **Configurações:** na primeira abertura, os valores que você tinha nas configurações do **usuário** são copiados para o nome novo, e a extensão avisa. Valores definidos no `settings.json` de um **workspace** não são copiados, de propósito. Depois de conferir, apague as chaves `claudeCliLite.*` antigas.
+- **Atalhos de teclado personalizados** que usam comandos como `claudeCliLite.askSelection` precisam ser trocados por `cliteAi.askSelection`. Os atalhos padrão já vêm atualizados.
+- **O texto dos comandos** agora começa com `CLIte-ai:` em vez de `Claude:`.
 
 ## Estrutura
 

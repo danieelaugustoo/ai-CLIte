@@ -34,7 +34,7 @@ export interface ChildEnv {
 
 /**
  * Monta o ambiente do processo filho. `extraNames` são nomes que o usuário
- * permitiu em `claudeCliLite.extraEnvNames` (ex.: AWS_PROFILE para quem usa o Bedrock).
+ * permitiu em `cliteAi.extraEnvNames` (ex.: AWS_PROFILE para quem usa o Bedrock).
  */
 export function buildChildEnv(source: NodeJS.ProcessEnv, extraNames: string[] = []): ChildEnv {
   const extra = new Set(extraNames.map((n) => String(n).trim().toUpperCase()).filter((n) => /^[A-Z_][A-Z0-9_]*$/.test(n)));

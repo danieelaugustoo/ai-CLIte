@@ -58,7 +58,7 @@ export async function addToContext(uri?: vscode.Uri, uris?: vscode.Uri[]): Promi
     uris && uris.length > 0 ? uris : uri ? [uri] : vscode.window.activeTextEditor ? [vscode.window.activeTextEditor.document.uri] : [];
 
   if (candidates.length === 0) {
-    vscode.window.showWarningMessage("Claude CLI Lite: nenhum ficheiro para adicionar.");
+    vscode.window.showWarningMessage("CLIte-ai: nenhum ficheiro para adicionar.");
     return;
   }
 
@@ -68,11 +68,11 @@ export async function addToContext(uri?: vscode.Uri, uris?: vscode.Uri[]): Promi
       try {
         const stat = await vscode.workspace.fs.stat(u);
         if (stat.type & vscode.FileType.Directory) {
-          vscode.window.showWarningMessage(`Claude CLI Lite: "${vscode.workspace.asRelativePath(u, false)}" é uma pasta; escolhe ficheiros.`);
+          vscode.window.showWarningMessage(`CLIte-ai: "${vscode.workspace.asRelativePath(u, false)}" é uma pasta; escolhe ficheiros.`);
           continue;
         }
       } catch {
-        vscode.window.showWarningMessage(`Claude CLI Lite: não foi possível ler "${u.fsPath}".`);
+        vscode.window.showWarningMessage(`CLIte-ai: não foi possível ler "${u.fsPath}".`);
         continue;
       }
     }
@@ -93,14 +93,14 @@ export async function addToContext(uri?: vscode.Uri, uris?: vscode.Uri[]): Promi
 
   onChange();
   if (added > 0) {
-    vscode.window.setStatusBarMessage(`Claude CLI Lite: ${added} ficheiro(s) adicionado(s) ao contexto (${files.size} no total).`, 4000);
+    vscode.window.setStatusBarMessage(`CLIte-ai: ${added} ficheiro(s) adicionado(s) ao contexto (${files.size} no total).`, 4000);
   }
 }
 
 /** Quick Pick com todos os ficheiros pré-selecionados; os desmarcados saem do carrinho. */
 export async function manageContext(): Promise<void> {
   if (files.size === 0) {
-    vscode.window.showInformationMessage("Claude CLI Lite: o contexto está vazio.");
+    vscode.window.showInformationMessage("CLIte-ai: o contexto está vazio.");
     return;
   }
 
@@ -184,7 +184,7 @@ export function totalChars(list: CartFile[]): number {
 
 /** Pede confirmação (modal) se o contexto passar o limite. Devolve false se o utilizador cancelar. */
 export async function confirmSize(list: CartFile[]): Promise<boolean> {
-  const max = vscode.workspace.getConfiguration("claudeCliLite").get<number>("contextMaxChars", 60000);
+  const max = vscode.workspace.getConfiguration("cliteAi").get<number>("contextMaxChars", 60000);
   const total = totalChars(list);
   if (total <= max) {
     return true;

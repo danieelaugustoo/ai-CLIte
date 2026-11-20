@@ -75,7 +75,7 @@ export function summary(): { turns: number; chars: number } {
 
 /** Aplica os limites das definições, descartando primeiro os turnos mais antigos. */
 function trim(): void {
-  const config = vscode.workspace.getConfiguration("claudeCliLite");
+  const config = vscode.workspace.getConfiguration("cliteAi");
   const maxTurns = Math.max(1, config.get<number>("historyMaxTurns", 3));
   const maxChars = config.get<number>("historyMaxChars", 20000);
 
